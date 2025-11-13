@@ -1,0 +1,24 @@
+.App {
+  min-height: 100vh;
+}
+
+.logo {
+  height: 32px;
+  margin: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: bold;
+  color: #1890ff;
+}
+
+.site-layout {
+  min-height: 100vh;
+}
+
+.site-layout-background {
+  background: #fff;
+  padding: 24px;
+  min-height: 360px;
+}
