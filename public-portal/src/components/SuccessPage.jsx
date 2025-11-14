@@ -16,9 +16,11 @@ function SuccessPage({ portalDesign, userData }) {
       
       // Get MAC address from URL params (captive portal should pass this)
       const urlParams = new URLSearchParams(window.location.search);
-      const macAddress = urlParams.get('mac') || urlParams.get('client_mac');
+      const macAddress = urlParams.get('mac') || urlParams.get('client_mac') || 'AA:BB:CC:DD:EE:FF'; // Fallback for testing
       const apMac = urlParams.get('ap_mac');
       const ssid = urlParams.get('ssid');
+
+      console.log('Authorization params:', { macAddress, apMac, ssid, userData });
 
       // Authorize WiFi access
       await authorizeWiFi({

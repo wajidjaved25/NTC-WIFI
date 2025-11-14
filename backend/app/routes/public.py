@@ -259,6 +259,14 @@ async def register_user(data: UserRegister, db: Session = Depends(get_db)):
 async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
     """Authorize WiFi access"""
     
+    print(f"\n=== AUTHORIZE REQUEST ===")
+    print(f"Received data: {data}")
+    print(f"user_id: {data.user_id}")
+    print(f"mobile: {data.mobile}")
+    print(f"mac_address: {data.mac_address}")
+    print(f"ap_mac: {data.ap_mac}")
+    print(f"ssid: {data.ssid}")
+    
     # Get user
     user = None
     if data.user_id:
