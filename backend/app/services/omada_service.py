@@ -89,34 +89,37 @@ class OmadaService:
     def test_connection(self) -> Dict:
         """Test connection to Omada controller"""
         try:
-            logger.info("=== Starting test_connection ===")
-            logger.info(f"About to call login() with controller_id: {self.controller_id}")
+            print("\n=== Starting test_connection ===")
+            print(f"About to call login() with controller_id: {self.controller_id}\n")
             
             login_result = self.login()
-            logger.info(f"Login result: {login_result}")
+            print(f"Login result: {login_result}")
             
             if login_result:
+                print(f"\nSession cookies after login: {self.session.cookies.get_dict()}")
+                print(f"Session headers after login: {dict(self.session.headers)}\n")
+                
                 # Try to get controller info
                 base_url = self._get_base_api_url()
                 info_url = f"{base_url}/info"
-                logger.info(f"Fetching controller info from: {info_url}")
+                print(f"Fetching controller info from: {info_url}")
                 
                 response = self.session.get(info_url, timeout=10)
-                logger.info(f"Info endpoint status: {response.status_code}")
-                logger.info(f"Info endpoint response text (first 200 chars): {response.text[:200]}")
+                print(f"Info endpoint status: {response.status_code}")
+                print(f"Info endpoint response (first 500 chars): {response.text[:500]}...\n")
                 
                 if response.status_code == 200:
                     try:
                         data = response.json()
-                        logger.info(f"Info endpoint JSON: {data}")
+                        print(f"✓ Info endpoint JSON: {data}\n")
                         return {
                             "success": True,
                             "message": "Connection successful",
                             "controller_info": data.get('result', {})
                         }
                     except Exception as json_err:
-                        logger.error(f"Failed to parse JSON response: {json_err}")
-                        logger.error(f"Response text: {response.text}")
+                        print(f"✗ Failed to parse JSON response: {json_err}")
+                        print(f"Response text: {response.text}\n")
                         return {
                             "success": False,
                             "message": f"Invalid JSON response from controller: {str(json_err)}"
@@ -127,16 +130,16 @@ class OmadaService:
                         "message": f"Failed to get controller info: HTTP {response.status_code}"
                     }
             else:
-                logger.error("Login returned False - authentication failed")
+                print("\n✗ Login returned False - authentication failed\n")
                 return {
                     "success": False,
                     "message": "Authentication failed"
                 }
         
         except Exception as e:
-            logger.error(f"Exception in test_connection: {str(e)}")
+            print(f"\n✗ Exception in test_connection: {str(e)}\n")
             import traceback
-            logger.error(traceback.format_exc())
+            traceback.print_exc()
             return {
                 "success": False,
                 "message": f"Connection error: {str(e)}"
