@@ -321,7 +321,7 @@ async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
         if not result.get('success'):
             # Rollback session if Omada authorization failed
             session.session_status = 'failed'
-            session.disconnect_time = datetime.now(timezone.utc)
+            session.end_time = datetime.now(timezone.utc)
             db.commit()
             
             raise HTTPException(
@@ -344,7 +344,7 @@ async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
     except Exception as e:
         # Rollback session if any error
         session.session_status = 'failed'
-        session.disconnect_time = datetime.now(timezone.utc)
+        session.end_time = datetime.now(timezone.utc)
         db.commit()
         
         raise HTTPException(
@@ -377,7 +377,7 @@ async def get_active_ads(db: Session = Depends(get_db)):
             "title": ad.title,
             "description": ad.description,
             "ad_type": ad.ad_type,
-            "file_path": f"http://localhost:8000/media/ads/{os.path.basename(ad.file_path)}",
+            "file_path": f"/media/ads/{os.path.basename(ad.file_path)}",
             "link_url": getattr(ad, 'link_url', None),
             "display_duration": ad.display_duration,
             "enable_skip": getattr(ad, 'auto_skip', False),
@@ -454,7 +454,7 @@ async def get_ads(
             "title": ad.title,
             "description": ad.description,
             "ad_type": ad.ad_type,
-            "file_path": f"http://localhost:8000/media/ads/{os.path.basename(ad.file_path)}",
+            "file_path": f"/media/ads/{os.path.basename(ad.file_path)}",
             "link_url": getattr(ad, 'link_url', None),
             "display_duration": ad.display_duration
         } for ad in ads]
