@@ -42,7 +42,29 @@ const OmadaConfigForm = ({ onSave, onTest, initialData, loading }) => {
 
   const handleTestConnection = async () => {
     try {
-      const values = await form.validateFields(['controller_url', 'username', 'password']);
+      // If password is not filled and we have initialData (existing config), 
+      // we need to use the stored password
+      const currentValues = form.getFieldsValue();
+      const hasPassword = currentValues.password && currentValues.password.trim();
+      
+      if (!hasPassword && !initialData?.id) {
+        message.error('Please enter password for new configuration');
+        return;
+      }
+      
+      // Validate required fields except password if it's an existing config
+      const fieldsToValidate = hasPassword || !initialData?.id 
+        ? ['controller_url', 'username', 'password']
+        : ['controller_url', 'username'];
+      
+      const values = await form.validateFields(fieldsToValidate);
+      
+      // Add flag to indicate if we should use stored password
+      if (!hasPassword && initialData?.id) {
+        values.use_stored_password = true;
+        values.config_id = initialData.id;
+      }
+      
       setTesting(true);
       await onTest(values);
       message.success('Connection successful!');
@@ -211,9 +233,17 @@ const OmadaConfigForm = ({ onSave, onTest, initialData, loading }) => {
               <Form.Item
                 label="Password"
                 name="password"
-                rules={[{ required: true, message: 'Please enter password' }]}
+                rules={[
+                  { 
+                    required: !initialData?.id, 
+                    message: 'Please enter password' 
+                  }
+                ]}
+                tooltip={initialData?.id ? "Leave empty to keep existing password" : ""}
               >
-                <Input.Password placeholder="Enter controller password" />
+                <Input.Password 
+                  placeholder={initialData?.id ? "Leave empty to keep existing" : "Enter controller password"} 
+                />
               </Form.Item>
             </Col>
             <Col span={24}>

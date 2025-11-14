@@ -26,10 +26,16 @@ const OmadaSettings = () => {
 
   const handleSave = async (values) => {
     try {
+      // Remove empty password field if updating existing config
+      const dataToSend = { ...values };
+      if (config?.id && (!dataToSend.password || dataToSend.password.trim() === '')) {
+        delete dataToSend.password;
+      }
+      
       // Use PATCH if updating existing config, POST if creating new
       const endpoint = config?.id ? `/omada/configs/${config.id}` : '/omada/configs';
       const method = config?.id ? 'patch' : 'post';
-      const response = await api[method](endpoint, values);
+      const response = await api[method](endpoint, dataToSend);
       message.success('Configuration saved successfully!');
       setConfig(response.data);
       return response.data;

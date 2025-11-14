@@ -190,15 +190,32 @@ async def activate_config(
 @router.post("/test-connection")
 async def test_connection(
     test_data: OmadaTestConnection,
-    current_user: Admin = Depends(require_omada_permission)
+    current_user: Admin = Depends(require_omada_permission),
+    db: Session = Depends(get_db)
 ):
-    encrypted_password = encrypt_password(test_data.password)
+    # If use_stored_password is True, fetch password from database
+    if test_data.use_stored_password and test_data.config_id:
+        config = db.query(OmadaConfig).filter(OmadaConfig.id == test_data.config_id).first()
+        if not config:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Configuration not found"
+            )
+        encrypted_password = config.password_encrypted
+    elif test_data.password:
+        encrypted_password = encrypt_password(test_data.password)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password is required"
+        )
+    
     omada = OmadaService(
         test_data.controller_url,
         test_data.username,
         encrypted_password,
-        test_data.controller_id if hasattr(test_data, 'controller_id') else None,
-        test_data.site_id if hasattr(test_data, 'site_id') else "Default"
+        test_data.controller_id,
+        test_data.site_id
     )
     
     result = omada.test_connection()

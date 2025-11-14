@@ -96,9 +96,11 @@ class OmadaConfigResponse(BaseModel):
 class OmadaTestConnection(BaseModel):
     controller_url: str
     username: str
-    password: str
+    password: Optional[str] = None
     controller_id: Optional[str] = None
     site_id: Optional[str] = "Default"
+    use_stored_password: Optional[bool] = False
+    config_id: Optional[int] = None
 
 # Client Authorization
 class ClientAuthorization(BaseModel):
