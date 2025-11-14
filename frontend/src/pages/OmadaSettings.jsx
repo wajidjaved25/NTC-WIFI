@@ -48,13 +48,25 @@ const OmadaSettings = () => {
 
   const handleTest = async (values) => {
     try {
-      const response = await api.post('/omada/test-connection', {
+      const testData = {
         controller_url: values.controller_url,
         username: values.username,
-        password: values.password || values.password_encrypted,
         controller_id: values.controller_id,
         site_id: values.site_id,
-      });
+      };
+      
+      // If password is provided, use it; otherwise use stored password
+      if (values.password && values.password.trim()) {
+        testData.password = values.password;
+      } else if (config?.id) {
+        // Use stored password for existing config
+        testData.use_stored_password = true;
+        testData.config_id = config.id;
+      } else {
+        throw new Error('Password is required for new configuration');
+      }
+      
+      const response = await api.post('/omada/test-connection', testData);
       
       if (response.data.success) {
         message.success('Connection successful!');

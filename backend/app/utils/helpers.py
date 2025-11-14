@@ -6,8 +6,17 @@ import json
 
 from ..config import settings
 
-# Initialize Fernet for encryption
-cipher_suite = Fernet(settings.ENCRYPTION_KEY.encode() if len(settings.ENCRYPTION_KEY) == 44 else Fernet.generate_key())
+# Initialize Fernet cipher - use the key from settings
+def _get_cipher():
+    """Get Fernet cipher using key from settings"""
+    try:
+        # Ensure the key is valid base64 and 32 bytes when decoded
+        key = settings.ENCRYPTION_KEY
+        if isinstance(key, str):
+            key = key.encode()
+        return Fernet(key)
+    except Exception as e:
+        raise Exception(f"Invalid ENCRYPTION_KEY in .env: {str(e)}. Key must be 44 characters (base64-encoded 32 bytes). Generate with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'")
 
 async def send_otp_sms(mobile: str, otp: str) -> dict:
     """Send OTP via SMS using connect.smsapp.pk (Superapp)"""
@@ -65,16 +74,18 @@ def generate_otp(length: int = 6) -> str:
 
 def encrypt_password(password: str) -> str:
     """Encrypt password for Omada config storage"""
+    cipher_suite = _get_cipher()
     encrypted = cipher_suite.encrypt(password.encode())
     return encrypted.decode()
 
 def decrypt_password(encrypted_password: str) -> str:
     """Decrypt password from Omada config"""
     try:
+        cipher_suite = _get_cipher()
         decrypted = cipher_suite.decrypt(encrypted_password.encode())
         return decrypted.decode()
-    except Exception:
-        return encrypted_password  # Return as-is if decryption fails
+    except Exception as e:
+        raise Exception(f"Failed to decrypt password. This usually means the ENCRYPTION_KEY has changed. Error: {str(e)}")
 
 def format_bytes(bytes_value: int) -> str:
     """Format bytes to human readable format"""
