@@ -92,7 +92,12 @@ class OmadaService:
         """Test connection to Omada controller"""
         try:
             logger.info("=== Starting test_connection ===")
-            if self.login():
+            logger.info(f"About to call login() with controller_id: {self.controller_id}")
+            
+            login_result = self.login()
+            logger.info(f"Login result: {login_result}")
+            
+            if login_result:
                 # Try to get controller info
                 base_url = self._get_base_api_url()
                 info_url = f"{base_url}/info"
@@ -124,6 +129,7 @@ class OmadaService:
                         "message": f"Failed to get controller info: HTTP {response.status_code}"
                     }
             else:
+                logger.error("Login returned False - authentication failed")
                 return {
                     "success": False,
                     "message": "Authentication failed"
