@@ -152,10 +152,10 @@ async def send_otp(data: OTPRequest, db: Session = Depends(get_db)):
         db.query(OTP).filter(OTP.mobile == mobile).delete()
         print(f"Deleted old OTPs")
         
-        # Create new OTP
+        # Create new OTP (note: column is 'otp' not 'otp_code')
         new_otp = OTP(
             mobile=mobile,
-            otp_code=otp_code,
+            otp=otp_code,
             expires_at=datetime.now(timezone.utc) + timedelta(minutes=5)
         )
         db.add(new_otp)
@@ -192,20 +192,19 @@ async def verify_otp(data: OTPVerify, db: Session = Depends(get_db)):
     mobile = data.mobile.strip()
     otp_code = data.otp.strip()
     
-    # Find OTP
+    # Find OTP (note: column is 'otp' not 'otp_code', and 'verified' not 'is_used')
     otp_record = db.query(OTP).filter(
         OTP.mobile == mobile,
-        OTP.otp_code == otp_code,
-        OTP.is_used == False,
+        OTP.otp == otp_code,
+        OTP.verified == False,
         OTP.expires_at > datetime.now(timezone.utc)
     ).first()
     
     if not otp_record:
         raise HTTPException(status_code=400, detail="Invalid or expired OTP")
     
-    # Mark as used
-    otp_record.is_used = True
-    otp_record.verified_at = datetime.now(timezone.utc)
+    # Mark as verified
+    otp_record.verified = True
     db.commit()
     
     return {"success": True, "message": "OTP verified successfully"}
