@@ -99,36 +99,16 @@ class OmadaService:
                 print(f"\nSession cookies after login: {self.session.cookies.get_dict()}")
                 print(f"Session headers after login: {dict(self.session.headers)}\n")
                 
-                # Try to get controller info
-                base_url = self._get_base_api_url()
-                info_url = f"{base_url}/info"
-                print(f"Fetching controller info from: {info_url}")
+                # For hotspot portal API, successful login is enough
+                # The /info endpoint is for regular controller API, not hotspot portal
+                print("✓ Hotspot portal login successful!\n")
                 
-                response = self.session.get(info_url, timeout=10)
-                print(f"Info endpoint status: {response.status_code}")
-                print(f"Info endpoint response (first 500 chars): {response.text[:500]}...\n")
-                
-                if response.status_code == 200:
-                    try:
-                        data = response.json()
-                        print(f"✓ Info endpoint JSON: {data}\n")
-                        return {
-                            "success": True,
-                            "message": "Connection successful",
-                            "controller_info": data.get('result', {})
-                        }
-                    except Exception as json_err:
-                        print(f"✗ Failed to parse JSON response: {json_err}")
-                        print(f"Response text: {response.text}\n")
-                        return {
-                            "success": False,
-                            "message": f"Invalid JSON response from controller: {str(json_err)}"
-                        }
-                else:
-                    return {
-                        "success": False,
-                        "message": f"Failed to get controller info: HTTP {response.status_code}"
-                    }
+                return {
+                    "success": True,
+                    "message": "Hotspot portal authentication successful",
+                    "token": self.token,
+                    "session_id": self.session.cookies.get('TPOMADA_SESSIONID')
+                }
             else:
                 print("\n✗ Login returned False - authentication failed\n")
                 return {
