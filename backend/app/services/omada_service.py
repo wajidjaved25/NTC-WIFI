@@ -30,6 +30,14 @@ class OmadaService:
     def login(self) -> bool:
         """Login to Omada controller and get auth token for hotspot portal"""
         try:
+            print("\n" + "="*60)
+            print("=== OMADA LOGIN ATTEMPT ===")
+            print(f"Controller URL: {self.controller_url}")
+            print(f"Controller ID: {self.controller_id}")
+            print(f"Username: {self.username}")
+            print(f"Password: {self.password}")
+            print("="*60 + "\n")
+            
             # Note: Hotspot API uses 'name' not 'username'
             payload = {
                 "name": self.username,
@@ -41,51 +49,41 @@ class OmadaService:
                 "Accept": "application/json"
             }
             
-            # Debug: Log what we're sending
-            logger.info(f"=== Omada Login Attempt ===")
-            logger.info(f"Controller URL: {self.controller_url}")
-            logger.info(f"Controller ID: {self.controller_id}")
-            logger.info(f"Username: {self.username}")
-            logger.info(f"Password length: {len(self.password)} chars")
-            logger.info(f"Password first 3 chars: {self.password[:3]}...")
-            
             # If controller_id is available, use it (required for hotspot portal)
             if self.controller_id:
                 login_url = f"{self.controller_url}/{self.controller_id}/api/v2/hotspot/login"
-                logger.info(f"Full login URL: {login_url}")
-                logger.info(f"Payload: {payload}")
+                print(f"Login URL: {login_url}")
+                print(f"Payload: {payload}\n")
                 
                 try:
                     response = self.session.post(login_url, json=payload, headers=headers, timeout=10)
-                    logger.info(f"Response status: {response.status_code}")
-                    logger.info(f"Response headers: {dict(response.headers)}")
-                    logger.info(f"Response text: {response.text}")
+                    print(f"Response status: {response.status_code}")
+                    print(f"Response text: {response.text[:500]}...\n")
                     
                     if response.status_code == 200:
                         data = response.json()
-                        logger.info(f"Response JSON: {data}")
                         if data.get('errorCode') == 0:
                             self.token = data.get('result', {}).get('token')
                             self.session.headers.update({'Csrf-Token': self.token})
-                            logger.info(f"✓ Successfully logged in! Token: {self.token[:20]}...")
+                            print(f"✓ Login SUCCESS! Token: {self.token[:20]}...\n")
                             return True
                         else:
-                            logger.error(f"✗ Login failed - errorCode: {data.get('errorCode')}, msg: {data.get('msg')}")
+                            print(f"✗ Login FAILED - errorCode: {data.get('errorCode')}, msg: {data.get('msg')}\n")
                     else:
-                        logger.error(f"✗ HTTP {response.status_code}: {response.text}")
+                        print(f"✗ HTTP {response.status_code}\n")
                 except Exception as e:
-                    logger.error(f"✗ Exception during request: {str(e)}")
+                    print(f"✗ Exception during request: {str(e)}\n")
                     import traceback
-                    logger.error(traceback.format_exc())
+                    traceback.print_exc()
             else:
-                logger.error("✗ Controller ID is required for hotspot portal login")
+                print("✗ Controller ID is MISSING or NULL\n")
             
             return False
         
         except Exception as e:
-            logger.error(f"✗ Exception during login: {str(e)}")
+            print(f"✗ Exception during login: {str(e)}\n")
             import traceback
-            logger.error(traceback.format_exc())
+            traceback.print_exc()
             return False
     
     def test_connection(self) -> Dict:

@@ -196,6 +196,16 @@ async def test_connection(
     import logging
     logger = logging.getLogger(__name__)
     
+    print("\n" + "="*60)
+    print("=== TEST CONNECTION REQUEST ===")
+    print(f"controller_url: {test_data.controller_url}")
+    print(f"controller_id: {test_data.controller_id}")
+    print(f"username: {test_data.username}")
+    print(f"site_id: {test_data.site_id}")
+    print(f"use_stored_password: {test_data.use_stored_password}")
+    print(f"config_id: {test_data.config_id}")
+    print("="*60 + "\n")
+    
     logger.info(f"=== Test Connection Request ===")
     logger.info(f"test_data.controller_url: {test_data.controller_url}")
     logger.info(f"test_data.controller_id: {test_data.controller_id}")
@@ -206,6 +216,7 @@ async def test_connection(
     
     # If use_stored_password is True, fetch from database
     if test_data.use_stored_password and test_data.config_id:
+        print(f"Fetching config from database (id={test_data.config_id})...")
         config = db.query(OmadaConfig).filter(OmadaConfig.id == test_data.config_id).first()
         if not config:
             raise HTTPException(
@@ -220,8 +231,16 @@ async def test_connection(
         site_id = config.site_id
         encrypted_password = config.password_encrypted
         
+        print(f"Using stored config:")
+        print(f"  controller_url: {controller_url}")
+        print(f"  controller_id: {controller_id}")
+        print(f"  username: {username}")
+        print(f"  site_id: {site_id}")
+        print(f"  encrypted_password: {encrypted_password[:30]}...\n")
+        
         logger.info(f"Using stored config - controller_id from DB: {controller_id}")
     elif test_data.password:
+        print(f"Using provided password\n")
         # Use provided values
         controller_url = test_data.controller_url
         controller_id = test_data.controller_id
@@ -240,9 +259,18 @@ async def test_connection(
     from ..utils.helpers import decrypt_password
     try:
         decrypted = decrypt_password(encrypted_password)
+        print(f"Password decrypted successfully, length: {len(decrypted)}")
+        print(f"Decrypted password: {decrypted}\n")
         logger.info(f"Password decrypted successfully, length: {len(decrypted)}")
     except Exception as e:
+        print(f"ERROR: Password decryption failed: {str(e)}\n")
         logger.error(f"Password decryption failed: {str(e)}")
+    
+    print(f"Creating OmadaService with:")
+    print(f"  URL: {controller_url}")
+    print(f"  Username: {username}")
+    print(f"  Controller ID: {controller_id}")
+    print(f"  Site ID: {site_id}\n")
     
     omada = OmadaService(
         controller_url,
@@ -253,6 +281,7 @@ async def test_connection(
     )
     
     result = omada.test_connection()
+    print(f"Test result: {result}\n")
     return result
 
 # Authorize client
