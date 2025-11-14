@@ -19,49 +19,65 @@ def _get_cipher():
         raise Exception(f"Invalid ENCRYPTION_KEY in .env: {str(e)}. Key must be 44 characters (base64-encoded 32 bytes). Generate with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'")
 
 async def send_otp_sms(mobile: str, otp: str) -> dict:
-    """Send OTP via SMS using connect.smsapp.pk (Superapp)"""
+    """Send OTP via SMS using connect.smsapp.pk v3 API (Superapp)"""
     try:
         from .validators import format_mobile_to_92
         
         # Ensure mobile is in 92XXXXX format
         formatted_mobile = format_mobile_to_92(mobile)
         
-        # SMS API configuration
-        api_url = "https://connect.smsapp.pk/api/SendSMS"
-        api_key = settings.SUPERAPP_API_KEY
-        client_id = settings.SUPERAPP_CLIENT_ID
+        # SMS API v3 configuration
+        api_url = "https://connect.smsapp.pk/api/v3/sms/send"
+        api_key = settings.SUPERAPP_API_KEY  # Bearer token
         sender_id = settings.SUPERAPP_SENDER_ID
         
         message = f"Your OTP for NTC WiFi is: {otp}. Valid for 5 minutes. Do not share this code."
         
+        # v3 API format
         payload = {
-            "ApiKey": api_key,
-            "ClientId": client_id,
-            "SenderId": sender_id,
-            "Message": message,
-            "MobileNumbers": formatted_mobile,  # 92XXXXX format
-            "Is_Unicode": False
+            "recipient": formatted_mobile,  # 92XXXXX format
+            "sender_id": sender_id,
+            "message": message
         }
+        
+        headers = {
+            "Accept": "application/json",
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        print(f"SMS API URL: {api_url}")
+        print(f"Formatted mobile: {formatted_mobile}")
+        print(f"Sender ID: {sender_id}")
         
         # Use asyncio to make non-blocking request
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
             None,
-            lambda: requests.post(api_url, json=payload, timeout=10)
+            lambda: requests.post(api_url, json=payload, headers=headers, timeout=10)
         )
+        
+        print(f"SMS API Response Status: {response.status_code}")
+        print(f"SMS API Response: {response.text}")
         
         if response.status_code == 200:
             result = response.json()
-            return {
-                "success": True,
-                "message": "OTP sent successfully",
-                "mobile": formatted_mobile,
-                "response": result
-            }
+            if result.get('status') == 'success':
+                return {
+                    "success": True,
+                    "message": "OTP sent successfully",
+                    "mobile": formatted_mobile,
+                    "response": result
+                }
+            else:
+                return {
+                    "success": False,
+                    "message": f"SMS API error: {result.get('message', 'Unknown error')}"
+                }
         else:
             return {
                 "success": False,
-                "message": f"Failed to send SMS: {response.text}"
+                "message": f"Failed to send SMS: HTTP {response.status_code}"
             }
     
     except Exception as e:
