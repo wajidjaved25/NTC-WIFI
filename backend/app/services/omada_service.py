@@ -30,14 +30,6 @@ class OmadaService:
     def login(self) -> bool:
         """Login to Omada controller and get auth token for hotspot portal"""
         try:
-            # Try hotspot login endpoint (correct for external portal)
-            login_urls = [
-                f"{self.controller_url}/{self.controller_id}/api/v2/hotspot/login" if self.controller_id else None,
-                f"{self.controller_url}/api/v2/hotspot/login"
-            ]
-            
-            login_urls = [url for url in login_urls if url]
-            
             # Note: Hotspot API uses 'name' not 'username'
             payload = {
                 "name": self.username,
@@ -49,30 +41,32 @@ class OmadaService:
                 "Accept": "application/json"
             }
             
-            for login_url in login_urls:
+            # If controller_id is available, use it (required for hotspot portal)
+            if self.controller_id:
+                login_url = f"{self.controller_url}/{self.controller_id}/api/v2/hotspot/login"
+                logger.info(f"Attempting hotspot login with controller_id at {login_url}")
+                
                 try:
-                    logger.info(f"Attempting hotspot login at {login_url}")
                     response = self.session.post(login_url, json=payload, headers=headers, timeout=10)
+                    logger.info(f"Response status: {response.status_code}")
                     
                     if response.status_code == 200:
                         data = response.json()
+                        logger.info(f"Response data: {data}")
                         if data.get('errorCode') == 0:
                             self.token = data.get('result', {}).get('token')
-                            # Set token in session headers for CSRF protection
-                            self.session.headers.update({
-                                'Csrf-Token': self.token
-                            })
-                            logger.info(f"Successfully logged in to Omada hotspot portal at {login_url}")
+                            self.session.headers.update({'Csrf-Token': self.token})
+                            logger.info(f"Successfully logged in to Omada hotspot portal")
                             return True
                         else:
-                            logger.error(f"Hotspot login failed at {login_url}: {data.get('msg')}")
+                            logger.error(f"Hotspot login failed: {data.get('msg')}")
                     else:
-                        logger.error(f"HTTP {response.status_code} at {login_url}")
+                        logger.error(f"HTTP {response.status_code}: {response.text}")
                 except Exception as e:
-                    logger.error(f"Failed to connect to {login_url}: {str(e)}")
-                    continue
+                    logger.error(f"Failed to connect: {str(e)}")
+            else:
+                logger.error("Controller ID is required for hotspot portal login. Please detect or enter the controller ID.")
             
-            logger.error("Failed to login with all attempted URLs")
             return False
         
         except Exception as e:
@@ -336,24 +330,45 @@ class OmadaService:
     def get_controller_id(self) -> Dict:
         """Auto-detect controller ID from login response or API"""
         try:
-            # Try to get controller info without controller_id
+            # Method 1: Try loginStatus endpoint
             info_url = f"{self.controller_url}/api/v2/loginStatus"
+            logger.info(f"Attempting to detect controller ID from {info_url}")
+            
             response = self.session.get(info_url, timeout=10)
             
             if response.status_code == 200:
                 data = response.json()
+                logger.info(f"loginStatus response: {data}")
                 if data.get('errorCode') == 0:
                     result = data.get('result', {})
                     omadac_id = result.get('omadacId')
                     if omadac_id:
+                        logger.info(f"Detected controller ID: {omadac_id}")
                         return {
                             "success": True,
                             "controller_id": omadac_id
                         }
             
+            # Method 2: Try accessing the web interface and extract from redirect
+            logger.info("Trying to detect from web interface...")
+            web_response = self.session.get(self.controller_url, allow_redirects=False, timeout=10)
+            if web_response.status_code in [301, 302, 303, 307, 308]:
+                location = web_response.headers.get('Location', '')
+                logger.info(f"Redirect location: {location}")
+                # Extract controller ID from URL like: /abc123def456/login
+                import re
+                match = re.search(r'/([a-f0-9]{32})/', location)
+                if match:
+                    controller_id = match.group(1)
+                    logger.info(f"Detected controller ID from redirect: {controller_id}")
+                    return {
+                        "success": True,
+                        "controller_id": controller_id
+                    }
+            
             return {
                 "success": False,
-                "message": "Could not detect controller ID"
+                "message": "Could not detect controller ID. Please enter it manually."
             }
         
         except Exception as e:
