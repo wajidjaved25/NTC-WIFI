@@ -45,7 +45,7 @@ const OmadaSettings = () => {
       const response = await api.post('/omada/test-connection', {
         controller_url: values.controller_url,
         username: values.username,
-        password_encrypted: values.password_encrypted,
+        password: values.password || values.password_encrypted,
         controller_id: values.controller_id,
         site_id: values.site_id,
       });
