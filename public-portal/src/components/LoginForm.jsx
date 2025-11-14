@@ -148,7 +148,7 @@ function LoginForm({ portalDesign, onSuccess }) {
       };
 
       const response = await registerUser(userData);
-      onSuccess(response);
+      onSuccess(response.user);
     } catch (err) {
       setError(err.response?.data?.detail || 'Invalid OTP');
     } finally {
