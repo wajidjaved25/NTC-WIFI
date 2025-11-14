@@ -41,36 +41,51 @@ class OmadaService:
                 "Accept": "application/json"
             }
             
+            # Debug: Log what we're sending
+            logger.info(f"=== Omada Login Attempt ===")
+            logger.info(f"Controller URL: {self.controller_url}")
+            logger.info(f"Controller ID: {self.controller_id}")
+            logger.info(f"Username: {self.username}")
+            logger.info(f"Password length: {len(self.password)} chars")
+            logger.info(f"Password first 3 chars: {self.password[:3]}...")
+            
             # If controller_id is available, use it (required for hotspot portal)
             if self.controller_id:
                 login_url = f"{self.controller_url}/{self.controller_id}/api/v2/hotspot/login"
-                logger.info(f"Attempting hotspot login with controller_id at {login_url}")
+                logger.info(f"Full login URL: {login_url}")
+                logger.info(f"Payload: {payload}")
                 
                 try:
                     response = self.session.post(login_url, json=payload, headers=headers, timeout=10)
                     logger.info(f"Response status: {response.status_code}")
+                    logger.info(f"Response headers: {dict(response.headers)}")
+                    logger.info(f"Response text: {response.text}")
                     
                     if response.status_code == 200:
                         data = response.json()
-                        logger.info(f"Response data: {data}")
+                        logger.info(f"Response JSON: {data}")
                         if data.get('errorCode') == 0:
                             self.token = data.get('result', {}).get('token')
                             self.session.headers.update({'Csrf-Token': self.token})
-                            logger.info(f"Successfully logged in to Omada hotspot portal")
+                            logger.info(f"✓ Successfully logged in! Token: {self.token[:20]}...")
                             return True
                         else:
-                            logger.error(f"Hotspot login failed: {data.get('msg')}")
+                            logger.error(f"✗ Login failed - errorCode: {data.get('errorCode')}, msg: {data.get('msg')}")
                     else:
-                        logger.error(f"HTTP {response.status_code}: {response.text}")
+                        logger.error(f"✗ HTTP {response.status_code}: {response.text}")
                 except Exception as e:
-                    logger.error(f"Failed to connect: {str(e)}")
+                    logger.error(f"✗ Exception during request: {str(e)}")
+                    import traceback
+                    logger.error(traceback.format_exc())
             else:
-                logger.error("Controller ID is required for hotspot portal login. Please detect or enter the controller ID.")
+                logger.error("✗ Controller ID is required for hotspot portal login")
             
             return False
         
         except Exception as e:
-            logger.error(f"Exception during login: {str(e)}")
+            logger.error(f"✗ Exception during login: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             return False
     
     def test_connection(self) -> Dict:
