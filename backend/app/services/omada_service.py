@@ -11,42 +11,60 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logger = logging.getLogger(__name__)
 
 class OmadaService:
-    def __init__(self, controller_url: str, username: str, encrypted_password: str, site_id: str = "Default"):
+    def __init__(self, controller_url: str, username: str, encrypted_password: str, controller_id: str = None, site_id: str = "Default"):
         self.controller_url = controller_url.rstrip('/')
         self.username = username
         self.password = decrypt_password(encrypted_password)
+        self.controller_id = controller_id
         self.site_id = site_id
         self.token = None
         self.session = requests.Session()
         self.session.verify = False  # Disable SSL verification for self-signed certs
     
+    def _get_base_api_url(self) -> str:
+        """Get base API URL with controller ID if available"""
+        if self.controller_id:
+            return f"{self.controller_url}/{self.controller_id}/api/v2"
+        return f"{self.controller_url}/api/v2"
+    
     def login(self) -> bool:
         """Login to Omada controller and get auth token"""
         try:
-            login_url = f"{self.controller_url}/api/v2/login"
+            # Try both login endpoints
+            login_urls = [
+                f"{self.controller_url}/{self.controller_id}/api/v2/login" if self.controller_id else None,
+                f"{self.controller_url}/api/v2/login"
+            ]
+            
+            login_urls = [url for url in login_urls if url]
+            
             payload = {
                 "username": self.username,
                 "password": self.password
             }
             
-            response = self.session.post(login_url, json=payload, timeout=10)
+            for login_url in login_urls:
+                try:
+                    response = self.session.post(login_url, json=payload, timeout=10)
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data.get('errorCode') == 0:
+                            self.token = data.get('result', {}).get('token')
+                            # Set token in session headers
+                            self.session.headers.update({
+                                'Csrf-Token': self.token
+                            })
+                            logger.info(f"Successfully logged in to Omada controller at {login_url}")
+                            return True
+                        else:
+                            logger.error(f"Login failed at {login_url}: {data.get('msg')}")
+                except Exception as e:
+                    logger.error(f"Failed to connect to {login_url}: {str(e)}")
+                    continue
             
-            if response.status_code == 200:
-                data = response.json()
-                if data.get('errorCode') == 0:
-                    self.token = data.get('result', {}).get('token')
-                    # Set token in session headers
-                    self.session.headers.update({
-                        'Csrf-Token': self.token
-                    })
-                    logger.info(f"Successfully logged in to Omada controller")
-                    return True
-                else:
-                    logger.error(f"Login failed: {data.get('msg')}")
-                    return False
-            else:
-                logger.error(f"Login request failed with status {response.status_code}")
-                return False
+            logger.error("Failed to login with all attempted URLs")
+            return False
         
         except Exception as e:
             logger.error(f"Exception during login: {str(e)}")
@@ -57,7 +75,8 @@ class OmadaService:
         try:
             if self.login():
                 # Try to get controller info
-                info_url = f"{self.controller_url}/api/v2/info"
+                base_url = self._get_base_api_url()
+                info_url = f"{base_url}/info"
                 response = self.session.get(info_url, timeout=10)
                 
                 if response.status_code == 200:
@@ -97,10 +116,10 @@ class OmadaService:
                 if not self.login():
                     return {"success": False, "message": "Authentication failed"}
             
-            auth_url = f"{self.controller_url}/api/v2/hotspot/extPortal/auth"
+            base_url = self._get_base_api_url()
+            auth_url = f"{base_url}/hotspot/sites/{self.site_id}/clients/{mac_address}/authorize"
             
             payload = {
-                "site": self.site_id,
                 "mac": mac_address,
                 "duration": duration,  # seconds
                 "authType": 1  # External portal auth
@@ -144,10 +163,10 @@ class OmadaService:
                 if not self.login():
                     return {"success": False, "message": "Authentication failed"}
             
-            unauth_url = f"{self.controller_url}/api/v2/hotspot/extPortal/unauth"
+            base_url = self._get_base_api_url()
+            unauth_url = f"{base_url}/hotspot/sites/{self.site_id}/clients/{mac_address}/unauthorize"
             
             payload = {
-                "site": self.site_id,
                 "mac": mac_address
             }
             
@@ -182,17 +201,32 @@ class OmadaService:
                 if not self.login():
                     return {"success": False, "message": "Authentication failed"}
             
-            status_url = f"{self.controller_url}/api/v2/sites/{self.site_id}/clients/{mac_address}"
+            base_url = self._get_base_api_url()
+            status_url = f"{base_url}/sites/{self.site_id}/clients"
             
-            response = self.session.get(status_url, timeout=10)
+            # Query with MAC filter
+            params = {
+                "currentPage": 1,
+                "currentPageSize": 100,
+                "filters.mac": mac_address
+            }
+            
+            response = self.session.get(status_url, params=params, timeout=10)
             
             if response.status_code == 200:
                 data = response.json()
                 if data.get('errorCode') == 0:
-                    return {
-                        "success": True,
-                        "data": data.get('result')
-                    }
+                    clients = data.get('result', {}).get('data', [])
+                    if clients:
+                        return {
+                            "success": True,
+                            "data": clients[0]
+                        }
+                    else:
+                        return {
+                            "success": False,
+                            "message": "Client not found"
+                        }
                 else:
                     return {
                         "success": False,
@@ -208,24 +242,33 @@ class OmadaService:
             logger.error(f"Exception getting client status: {str(e)}")
             return {"success": False, "message": str(e)}
     
-    def get_online_clients(self) -> Dict:
+    def get_online_clients(self, page: int = 1, page_size: int = 100) -> Dict:
         """Get list of currently online clients"""
         try:
             if not self.token:
                 if not self.login():
                     return {"success": False, "message": "Authentication failed"}
             
-            clients_url = f"{self.controller_url}/api/v2/sites/{self.site_id}/clients"
+            base_url = self._get_base_api_url()
+            clients_url = f"{base_url}/sites/{self.site_id}/clients"
             
-            response = self.session.get(clients_url, timeout=10)
+            params = {
+                "currentPage": page,
+                "currentPageSize": page_size
+            }
+            
+            response = self.session.get(clients_url, params=params, timeout=10)
             
             if response.status_code == 200:
                 data = response.json()
                 if data.get('errorCode') == 0:
+                    result = data.get('result', {})
                     return {
                         "success": True,
-                        "clients": data.get('result', {}).get('data', []),
-                        "total": data.get('result', {}).get('total', 0)
+                        "clients": result.get('data', []),
+                        "total": result.get('totalRows', 0),
+                        "page": page,
+                        "page_size": page_size
                     }
                 else:
                     return {
@@ -249,9 +292,15 @@ class OmadaService:
                 if not self.login():
                     return {"success": False, "message": "Authentication failed"}
             
-            sites_url = f"{self.controller_url}/api/v2/sites"
+            base_url = self._get_base_api_url()
+            sites_url = f"{base_url}/sites"
             
-            response = self.session.get(sites_url, timeout=10)
+            params = {
+                "currentPage": 1,
+                "currentPageSize": 100
+            }
+            
+            response = self.session.get(sites_url, params=params, timeout=10)
             
             if response.status_code == 200:
                 data = response.json()
@@ -275,11 +324,39 @@ class OmadaService:
             logger.error(f"Exception getting sites: {str(e)}")
             return {"success": False, "message": str(e)}
     
+    def get_controller_id(self) -> Dict:
+        """Auto-detect controller ID from login response or API"""
+        try:
+            # Try to get controller info without controller_id
+            info_url = f"{self.controller_url}/api/v2/loginStatus"
+            response = self.session.get(info_url, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('errorCode') == 0:
+                    result = data.get('result', {})
+                    omadac_id = result.get('omadacId')
+                    if omadac_id:
+                        return {
+                            "success": True,
+                            "controller_id": omadac_id
+                        }
+            
+            return {
+                "success": False,
+                "message": "Could not detect controller ID"
+            }
+        
+        except Exception as e:
+            logger.error(f"Exception detecting controller ID: {str(e)}")
+            return {"success": False, "message": str(e)}
+    
     def logout(self):
         """Logout from Omada controller"""
         try:
             if self.token:
-                logout_url = f"{self.controller_url}/api/v2/logout"
+                base_url = self._get_base_api_url()
+                logout_url = f"{base_url}/logout"
                 self.session.post(logout_url, timeout=5)
                 self.token = None
                 logger.info("Logged out from Omada controller")

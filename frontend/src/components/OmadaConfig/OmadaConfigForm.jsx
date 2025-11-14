@@ -20,12 +20,14 @@ import {
   ReloadOutlined,
   ApiOutlined,
   InfoCircleOutlined,
+  SyncOutlined,
 } from '@ant-design/icons';
 import './OmadaConfigForm.css';
 
 const OmadaConfigForm = ({ onSave, onTest, initialData, loading }) => {
   const [form] = Form.useForm();
   const [testing, setTesting] = useState(false);
+  const [detecting, setDetecting] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
 
   useEffect(() => {
@@ -52,6 +54,36 @@ const OmadaConfigForm = ({ onSave, onTest, initialData, loading }) => {
       }
     } finally {
       setTesting(false);
+    }
+  };
+
+  const handleDetectControllerId = async () => {
+    try {
+      const values = await form.validateFields(['controller_url', 'username', 'password_encrypted']);
+      setDetecting(true);
+      
+      const response = await fetch('http://localhost:8000/api/omada/detect-controller-id', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: JSON.stringify(values),
+      });
+      
+      const result = await response.json();
+      
+      if (result.success && result.controller_id) {
+        form.setFieldsValue({ controller_id: result.controller_id });
+        message.success('Controller ID detected: ' + result.controller_id);
+        setHasChanges(true);
+      } else {
+        message.warning('Could not auto-detect Controller ID. Please enter it manually.');
+      }
+    } catch (error) {
+      message.error('Failed to detect Controller ID');
+    } finally {
+      setDetecting(false);
     }
   };
 
@@ -131,6 +163,31 @@ const OmadaConfigForm = ({ onSave, onTest, initialData, loading }) => {
               >
                 <Input placeholder="https://10.2.49.26:8043" />
               </Form.Item>
+            </Col>
+            <Col xs={24} md={12}>
+              <Form.Item
+                label={
+                  <span>
+                    Controller ID (omadacId){' '}
+                    <Tooltip title="Auto-detect or manually enter the Omada Controller ID">
+                      <InfoCircleOutlined />
+                    </Tooltip>
+                  </span>
+                }
+                name="controller_id"
+              >
+                <Input placeholder="e.g., 1a2b3c4d5e6f7g8h" />
+              </Form.Item>
+            </Col>
+            <Col span={24}>
+              <Button
+                icon={<SyncOutlined />}
+                onClick={handleDetectControllerId}
+                loading={detecting}
+                style={{ marginBottom: 16 }}
+              >
+                Auto-Detect Controller ID
+              </Button>
             </Col>
             <Col xs={24} md={12}>
               <Form.Item

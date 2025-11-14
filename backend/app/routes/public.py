@@ -18,6 +18,8 @@ from ..models.session import Session as WiFiSession
 from ..models.advertisement import Advertisement
 from ..models.ad_analytics import AdAnalytics
 from ..services.ad_service import AdDisplayService
+from ..services.omada_service import OmadaService
+from ..models.omada_config import OmadaConfig
 from ..utils.helpers import send_otp_sms, generate_otp
 
 router = APIRouter(prefix="/public", tags=["Public API"])
@@ -249,6 +251,15 @@ async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
     if user.is_blocked:
         raise HTTPException(status_code=403, detail="User is blocked")
     
+    # Validate MAC address
+    if not data.mac_address:
+        raise HTTPException(status_code=400, detail="MAC address is required")
+    
+    # Get active Omada configuration
+    omada_config = db.query(OmadaConfig).filter(OmadaConfig.is_active == True).first()
+    if not omada_config:
+        raise HTTPException(status_code=500, detail="No active Omada configuration found")
+    
     # Create session record
     session = WiFiSession(
         user_id=user.id,
@@ -265,15 +276,59 @@ async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
     user.last_login = datetime.utcnow()
     
     db.commit()
+    db.refresh(session)
     
-    # TODO: Call Omada API to authorize client
-    # This would involve calling the Omada controller to grant WiFi access
-    
-    return {
-        "success": True,
-        "message": "WiFi access authorized",
-        "session_id": session.id
-    }
+    # Call Omada API to authorize client
+    try:
+        omada = OmadaService(
+            controller_url=omada_config.controller_url,
+            username=omada_config.username,
+            encrypted_password=omada_config.password_encrypted,
+            controller_id=omada_config.controller_id,
+            site_id=omada_config.site_id
+        )
+        
+        # Authorize the client on Omada controller
+        result = omada.authorize_client(
+            mac_address=data.mac_address,
+            duration=omada_config.session_timeout,
+            upload_limit=omada_config.bandwidth_limit_up,
+            download_limit=omada_config.bandwidth_limit_down
+        )
+        
+        if not result.get('success'):
+            # Rollback session if Omada authorization failed
+            session.session_status = 'failed'
+            session.disconnect_time = datetime.utcnow()
+            db.commit()
+            
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Failed to authorize on WiFi controller: {result.get('message', 'Unknown error')}"
+            )
+        
+        # Update session with Omada response data
+        session.session_status = 'active'
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": "WiFi access authorized successfully",
+            "session_id": session.id,
+            "duration": omada_config.session_timeout,
+            "redirect_url": omada_config.redirect_url
+        }
+        
+    except Exception as e:
+        # Rollback session if any error
+        session.session_status = 'failed'
+        session.disconnect_time = datetime.utcnow()
+        db.commit()
+        
+        raise HTTPException(
+            status_code=500,
+            detail=f"Authorization error: {str(e)}"
+        )
 
 
 # ========== ADVERTISEMENTS ==========

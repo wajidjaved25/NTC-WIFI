@@ -26,7 +26,10 @@ const OmadaSettings = () => {
 
   const handleSave = async (values) => {
     try {
-      const response = await api.post('/omada/config', values);
+      // Use PATCH if updating existing config, POST if creating new
+      const endpoint = config?.id ? `/omada/configs/${config.id}` : '/omada/configs';
+      const method = config?.id ? 'patch' : 'post';
+      const response = await api[method](endpoint, values);
       message.success('Configuration saved successfully!');
       setConfig(response.data);
       return response.data;
@@ -43,6 +46,8 @@ const OmadaSettings = () => {
         controller_url: values.controller_url,
         username: values.username,
         password_encrypted: values.password_encrypted,
+        controller_id: values.controller_id,
+        site_id: values.site_id,
       });
       
       if (response.data.success) {

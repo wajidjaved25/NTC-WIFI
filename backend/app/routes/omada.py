@@ -196,7 +196,9 @@ async def test_connection(
     omada = OmadaService(
         test_data.controller_url,
         test_data.username,
-        encrypted_password
+        encrypted_password,
+        test_data.controller_id if hasattr(test_data, 'controller_id') else None,
+        test_data.site_id if hasattr(test_data, 'site_id') else "Default"
     )
     
     result = omada.test_connection()
@@ -220,6 +222,7 @@ async def authorize_client(
         config.controller_url,
         config.username,
         config.password_encrypted,
+        config.controller_id,
         config.site_id
     )
     
@@ -249,6 +252,7 @@ async def get_online_clients(
         config.controller_url,
         config.username,
         config.password_encrypted,
+        config.controller_id,
         config.site_id
     )
     
@@ -271,10 +275,29 @@ async def get_sites(
     omada = OmadaService(
         config.controller_url,
         config.username,
-        config.password_encrypted
+        config.password_encrypted,
+        config.controller_id
     )
     
     result = omada.get_sites()
+    return result
+
+# Auto-detect controller ID
+@router.post("/detect-controller-id")
+async def detect_controller_id(
+    test_data: OmadaTestConnection,
+    current_user: Admin = Depends(require_omada_permission)
+):
+    encrypted_password = encrypt_password(test_data.password)
+    omada = OmadaService(
+        test_data.controller_url,
+        test_data.username,
+        encrypted_password,
+        None,
+        "Default"
+    )
+    
+    result = omada.get_controller_id()
     return result
 
 # Delete configuration
