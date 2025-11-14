@@ -196,7 +196,15 @@ async def test_connection(
     import logging
     logger = logging.getLogger(__name__)
     
-    # If use_stored_password is True, fetch password from database
+    logger.info(f"=== Test Connection Request ===")
+    logger.info(f"test_data.controller_url: {test_data.controller_url}")
+    logger.info(f"test_data.controller_id: {test_data.controller_id}")
+    logger.info(f"test_data.username: {test_data.username}")
+    logger.info(f"test_data.site_id: {test_data.site_id}")
+    logger.info(f"test_data.use_stored_password: {test_data.use_stored_password}")
+    logger.info(f"test_data.config_id: {test_data.config_id}")
+    
+    # If use_stored_password is True, fetch from database
     if test_data.use_stored_password and test_data.config_id:
         config = db.query(OmadaConfig).filter(OmadaConfig.id == test_data.config_id).first()
         if not config:
@@ -204,12 +212,24 @@ async def test_connection(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Configuration not found"
             )
+        
+        # Use all values from database config
+        controller_url = config.controller_url
+        controller_id = config.controller_id
+        username = config.username
+        site_id = config.site_id
         encrypted_password = config.password_encrypted
-        logger.info(f"Using stored encrypted password for config {test_data.config_id}")
-        logger.info(f"Encrypted password (first 20 chars): {encrypted_password[:20]}...")
+        
+        logger.info(f"Using stored config - controller_id from DB: {controller_id}")
     elif test_data.password:
+        # Use provided values
+        controller_url = test_data.controller_url
+        controller_id = test_data.controller_id
+        username = test_data.username
+        site_id = test_data.site_id
         encrypted_password = encrypt_password(test_data.password)
-        logger.info(f"Using provided password, encrypted (first 20 chars): {encrypted_password[:20]}...")
+        
+        logger.info(f"Using provided password - controller_id: {controller_id}")
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -225,11 +245,11 @@ async def test_connection(
         logger.error(f"Password decryption failed: {str(e)}")
     
     omada = OmadaService(
-        test_data.controller_url,
-        test_data.username,
+        controller_url,
+        username,
         encrypted_password,
-        test_data.controller_id,
-        test_data.site_id
+        controller_id,
+        site_id
     )
     
     result = omada.test_connection()
