@@ -132,34 +132,57 @@ async def get_portal_design(db: Session = Depends(get_db)):
 async def send_otp(data: OTPRequest, db: Session = Depends(get_db)):
     """Send OTP to mobile number"""
     
-    # Validate mobile format
-    mobile = data.mobile.strip()
-    if not mobile.startswith('03') or len(mobile) != 11:
-        raise HTTPException(status_code=400, detail="Invalid mobile number format (use 03XXXXXXXXX)")
+    print(f"\n=== SEND OTP REQUEST ===")
+    print(f"Mobile: {data.mobile}")
     
-    # Generate OTP
-    otp_code = generate_otp()
-    
-    # Delete old OTPs for this mobile
-    db.query(OTP).filter(OTP.mobile == mobile).delete()
-    
-    # Create new OTP
-    new_otp = OTP(
-        mobile=mobile,
-        otp_code=otp_code,
-        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5)
-    )
-    db.add(new_otp)
-    db.commit()
-    
-    # Send SMS
     try:
-        await send_otp_sms(mobile, otp_code)
-    except Exception as e:
-        # Log error but don't fail - OTP is still valid
-        print(f"SMS sending failed: {e}")
+        # Validate mobile format
+        mobile = data.mobile.strip()
+        print(f"Stripped mobile: {mobile}")
+        
+        if not mobile.startswith('03') or len(mobile) != 11:
+            print(f"Invalid mobile format: {mobile}")
+            raise HTTPException(status_code=400, detail="Invalid mobile number format (use 03XXXXXXXXX)")
+        
+        # Generate OTP
+        otp_code = generate_otp()
+        print(f"Generated OTP: {otp_code}")
+        
+        # Delete old OTPs for this mobile
+        db.query(OTP).filter(OTP.mobile == mobile).delete()
+        print(f"Deleted old OTPs")
+        
+        # Create new OTP
+        new_otp = OTP(
+            mobile=mobile,
+            otp_code=otp_code,
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=5)
+        )
+        db.add(new_otp)
+        db.commit()
+        print(f"OTP saved to database")
+        
+        # Send SMS
+        try:
+            print(f"Attempting to send SMS...")
+            result = await send_otp_sms(mobile, otp_code)
+            print(f"SMS result: {result}")
+        except Exception as e:
+            # Log error but don't fail - OTP is still valid
+            print(f"SMS sending failed: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        print(f"Returning success response")
+        return {"success": True, "message": "OTP sent successfully"}
     
-    return {"success": True, "message": "OTP sent successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"\nERROR in send_otp: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/verify-otp")
