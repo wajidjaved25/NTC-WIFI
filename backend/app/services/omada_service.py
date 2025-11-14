@@ -134,12 +134,26 @@ class OmadaService:
     ) -> Dict:
         """Authorize a client to access WiFi"""
         try:
+            print("\n" + "="*60)
+            print("=== OMADA AUTHORIZE CLIENT ===")
+            print(f"MAC Address: {mac_address}")
+            print(f"Duration: {duration} seconds")
+            print(f"Upload Limit: {upload_limit}")
+            print(f"Download Limit: {download_limit}")
+            print(f"Current Token: {self.token}")
+            print("="*60 + "\n")
+            
             if not self.token:
+                print("No token found, attempting login...")
                 if not self.login():
+                    print("✗ Login failed!\n")
                     return {"success": False, "message": "Authentication failed"}
+                print(f"✓ Login successful! Token: {self.token[:20]}...\n")
             
             base_url = self._get_base_api_url()
             auth_url = f"{base_url}/hotspot/sites/{self.site_id}/clients/{mac_address}/authorize"
+            
+            print(f"Authorization URL: {auth_url}")
             
             payload = {
                 "mac": mac_address,
@@ -153,28 +167,45 @@ class OmadaService:
             if download_limit:
                 payload['downloadLimit'] = download_limit
             
+            print(f"Payload: {payload}")
+            print(f"Session headers: {dict(self.session.headers)}")
+            print(f"Session cookies: {self.session.cookies.get_dict()}\n")
+            
+            print("Sending authorization request...")
             response = self.session.post(auth_url, json=payload, timeout=10)
+            
+            print(f"Response Status: {response.status_code}")
+            print(f"Response Headers: {dict(response.headers)}")
+            print(f"Response Body: {response.text[:500]}...\n")
             
             if response.status_code == 200:
                 data = response.json()
+                print(f"Parsed JSON: {data}\n")
+                
                 if data.get('errorCode') == 0:
+                    print("✓ Authorization SUCCESS!\n")
                     return {
                         "success": True,
                         "message": "Client authorized successfully",
                         "data": data.get('result')
                     }
                 else:
+                    print(f"✗ Authorization FAILED - errorCode: {data.get('errorCode')}, msg: {data.get('msg')}\n")
                     return {
                         "success": False,
                         "message": f"Authorization failed: {data.get('msg')}"
                     }
             else:
+                print(f"✗ HTTP Error {response.status_code}\n")
                 return {
                     "success": False,
-                    "message": f"Request failed with status {response.status_code}"
+                    "message": f"Request failed with status {response.status_code}: {response.text}"
                 }
         
         except Exception as e:
+            print(f"✗ Exception during authorization: {str(e)}\n")
+            import traceback
+            traceback.print_exc()
             logger.error(f"Exception during client authorization: {str(e)}")
             return {"success": False, "message": str(e)}
     
