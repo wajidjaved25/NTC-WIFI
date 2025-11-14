@@ -193,6 +193,9 @@ async def test_connection(
     current_user: Admin = Depends(require_omada_permission),
     db: Session = Depends(get_db)
 ):
+    import logging
+    logger = logging.getLogger(__name__)
+    
     # If use_stored_password is True, fetch password from database
     if test_data.use_stored_password and test_data.config_id:
         config = db.query(OmadaConfig).filter(OmadaConfig.id == test_data.config_id).first()
@@ -202,13 +205,24 @@ async def test_connection(
                 detail="Configuration not found"
             )
         encrypted_password = config.password_encrypted
+        logger.info(f"Using stored encrypted password for config {test_data.config_id}")
+        logger.info(f"Encrypted password (first 20 chars): {encrypted_password[:20]}...")
     elif test_data.password:
         encrypted_password = encrypt_password(test_data.password)
+        logger.info(f"Using provided password, encrypted (first 20 chars): {encrypted_password[:20]}...")
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Password is required"
         )
+    
+    # Test decryption
+    from ..utils.helpers import decrypt_password
+    try:
+        decrypted = decrypt_password(encrypted_password)
+        logger.info(f"Password decrypted successfully, length: {len(decrypted)}")
+    except Exception as e:
+        logger.error(f"Password decryption failed: {str(e)}")
     
     omada = OmadaService(
         test_data.controller_url,
