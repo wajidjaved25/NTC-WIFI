@@ -17,7 +17,10 @@ function AdDisplay({ portalDesign, userData, onComplete, onSkip }) {
   const loadAds = async () => {
     try {
       setLoading(true);
-      const adsData = await getActiveAds();
+      const response = await getActiveAds();
+      
+      // Extract ads array from response
+      const adsData = response.ads || response || [];
       
       if (!adsData || adsData.length === 0) {
         // No ads, skip to login
