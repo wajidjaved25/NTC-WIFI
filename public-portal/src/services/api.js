@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'api';
+// Use absolute URL or relative to domain root (not relative to /portal/)
+const API_BASE_URL = window.location.origin + '/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
