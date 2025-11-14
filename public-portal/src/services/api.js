@@ -11,7 +11,7 @@ const api = axios.create({
 
 // Portal Design
 export const getPortalDesign = async () => {
-  const response = await api.get('/portal/design');
+  const response = await api.get('/public/portal-design');
   return response.data;
 };
 
