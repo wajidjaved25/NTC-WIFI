@@ -347,17 +347,21 @@ async def get_active_ads(db: Session = Depends(get_db)):
     
     import os
     
-    return [{
-        "id": ad.id,
-        "title": ad.title,
-        "description": ad.description,
-        "ad_type": ad.ad_type,
-        "file_path": f"http://localhost:8000/media/ads/{os.path.basename(ad.file_path)}",
-        "link_url": getattr(ad, 'link_url', None),
-        "display_duration": ad.display_duration,
-        "enable_skip": getattr(ad, 'auto_skip', False),
-        "skip_after_seconds": getattr(ad, 'skip_after', 5)
-    } for ad in ads]
+    # Return wrapped in object to match frontend expectations
+    return {
+        "success": True,
+        "ads": [{
+            "id": ad.id,
+            "title": ad.title,
+            "description": ad.description,
+            "ad_type": ad.ad_type,
+            "file_path": f"http://localhost:8000/media/ads/{os.path.basename(ad.file_path)}",
+            "link_url": getattr(ad, 'link_url', None),
+            "display_duration": ad.display_duration,
+            "enable_skip": getattr(ad, 'auto_skip', False),
+            "skip_after_seconds": getattr(ad, 'skip_after', 5)
+        } for ad in ads]
+    }
 
 
 @router.post("/ads/track")
