@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
 
 from ..database import get_db
@@ -147,7 +147,7 @@ async def send_otp(data: OTPRequest, db: Session = Depends(get_db)):
     new_otp = OTP(
         mobile=mobile,
         otp_code=otp_code,
-        expires_at=datetime.utcnow() + timedelta(minutes=5)
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5)
     )
     db.add(new_otp)
     db.commit()
@@ -174,7 +174,7 @@ async def verify_otp(data: OTPVerify, db: Session = Depends(get_db)):
         OTP.mobile == mobile,
         OTP.otp_code == otp_code,
         OTP.is_used == False,
-        OTP.expires_at > datetime.utcnow()
+        OTP.expires_at > datetime.now(timezone.utc)
     ).first()
     
     if not otp_record:
@@ -182,7 +182,7 @@ async def verify_otp(data: OTPVerify, db: Session = Depends(get_db)):
     
     # Mark as used
     otp_record.is_used = True
-    otp_record.verified_at = datetime.utcnow()
+    otp_record.verified_at = datetime.now(timezone.utc)
     db.commit()
     
     return {"success": True, "message": "OTP verified successfully"}
@@ -204,8 +204,8 @@ async def register_user(data: UserRegister, db: Session = Depends(get_db)):
         user.cnic = data.cnic if data.id_type == 'cnic' else None
         user.passport = data.passport if data.id_type == 'passport' else None
         user.terms_accepted = data.terms_accepted
-        user.terms_accepted_at = datetime.utcnow()
-        user.last_login = datetime.utcnow()
+        user.terms_accepted_at = datetime.now(timezone.utc)
+        user.last_login = datetime.now(timezone.utc)
     else:
         # Create new user
         user = User(
@@ -215,8 +215,8 @@ async def register_user(data: UserRegister, db: Session = Depends(get_db)):
             cnic=data.cnic if data.id_type == 'cnic' else None,
             passport=data.passport if data.id_type == 'passport' else None,
             terms_accepted=data.terms_accepted,
-            terms_accepted_at=datetime.utcnow(),
-            last_login=datetime.utcnow()
+            terms_accepted_at=datetime.now(timezone.utc),
+            last_login=datetime.now(timezone.utc)
         )
         db.add(user)
     
@@ -266,14 +266,14 @@ async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
         mac_address=data.mac_address,
         ap_mac=data.ap_mac,
         ssid=data.ssid,
-        start_time=datetime.utcnow(),
+        start_time=datetime.now(timezone.utc),
         session_status='active'
     )
     db.add(session)
     
     # Update user stats
     user.total_sessions += 1
-    user.last_login = datetime.utcnow()
+    user.last_login = datetime.now(timezone.utc)
     
     db.commit()
     db.refresh(session)
@@ -299,7 +299,7 @@ async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
         if not result.get('success'):
             # Rollback session if Omada authorization failed
             session.session_status = 'failed'
-            session.disconnect_time = datetime.utcnow()
+            session.disconnect_time = datetime.now(timezone.utc)
             db.commit()
             
             raise HTTPException(
@@ -322,7 +322,7 @@ async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
     except Exception as e:
         # Rollback session if any error
         session.session_status = 'failed'
-        session.disconnect_time = datetime.utcnow()
+        session.disconnect_time = datetime.now(timezone.utc)
         db.commit()
         
         raise HTTPException(
@@ -337,7 +337,7 @@ async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
 async def get_active_ads(db: Session = Depends(get_db)):
     """Get active advertisements for display"""
     
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     
     ads = db.query(Advertisement).filter(
         Advertisement.is_active == True,
@@ -381,7 +381,7 @@ async def track_ad(
         watch_duration=data.watch_duration,
         ip_address=ip_address,
         user_agent=user_agent,
-        event_timestamp=datetime.utcnow()
+        event_timestamp=datetime.now(timezone.utc)
     )
     db.add(analytics)
     
@@ -410,7 +410,7 @@ async def get_ads(
 ):
     """Get active advertisements (legacy endpoint)"""
     
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     
     ads = db.query(Advertisement).filter(
         Advertisement.is_active == True,

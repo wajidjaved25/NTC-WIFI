@@ -42,7 +42,7 @@ const OmadaConfigForm = ({ onSave, onTest, initialData, loading }) => {
 
   const handleTestConnection = async () => {
     try {
-      const values = await form.validateFields(['controller_url', 'username', 'password_encrypted']);
+      const values = await form.validateFields(['controller_url', 'username', 'password']);
       setTesting(true);
       await onTest(values);
       message.success('Connection successful!');
@@ -59,10 +59,10 @@ const OmadaConfigForm = ({ onSave, onTest, initialData, loading }) => {
 
   const handleDetectControllerId = async () => {
     try {
-      const values = await form.validateFields(['controller_url', 'username', 'password_encrypted']);
+      const values = await form.validateFields(['controller_url', 'username', 'password']);
       setDetecting(true);
       
-      const response = await fetch('http://localhost:8000/api/omada/detect-controller-id', {
+      const response = await fetch('/api/omada/detect-controller-id', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -210,7 +210,7 @@ const OmadaConfigForm = ({ onSave, onTest, initialData, loading }) => {
             <Col xs={24} md={12}>
               <Form.Item
                 label="Password"
-                name="password_encrypted"
+                name="password"
                 rules={[{ required: true, message: 'Please enter password' }]}
               >
                 <Input.Password placeholder="Enter controller password" />
@@ -399,10 +399,7 @@ const OmadaConfigForm = ({ onSave, onTest, initialData, loading }) => {
                   min={0}
                   style={{ width: '100%' }}
                   placeholder="0 (unlimited)"
-                  onChange={(value) => {
-                    // Convert MB to bytes for storage
-                    form.setFieldValue('daily_data_limit', value ? value * 1024 * 1024 : null);
-                  }}
+  
                 />
               </Form.Item>
             </Col>
@@ -416,9 +413,7 @@ const OmadaConfigForm = ({ onSave, onTest, initialData, loading }) => {
                   min={0}
                   style={{ width: '100%' }}
                   placeholder="0 (unlimited)"
-                  onChange={(value) => {
-                    form.setFieldValue('session_data_limit', value ? value * 1024 * 1024 : null);
-                  }}
+
                 />
               </Form.Item>
             </Col>

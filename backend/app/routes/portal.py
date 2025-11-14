@@ -240,14 +240,14 @@ async def upload_logo(
             os.remove(design.logo_path)
         
         # Update design with web-accessible path and enable logo display
-        design.logo_path = f"http://localhost:8000/media/portal/{filename}"
+        design.logo_path = f"/media/portal/{filename}"
         design.show_logo = True  # Automatically enable logo when uploaded
         db.commit()
         
         return {
             "success": True,
             "message": "Logo uploaded successfully",
-            "file_path": f"http://localhost:8000/media/portal/{filename}"
+            "file_path": f"/media/portal/{filename}"
         }
     
     except Exception as e:
@@ -296,7 +296,7 @@ async def upload_background(
         # Update design with web-accessible path
         # Note: We don't automatically set show_background=True here anymore
         # because the user might have explicitly toggled it OFF
-        design.background_image = f"http://localhost:8000/media/portal/{filename}"
+        design.background_image = f"/media/portal/{filename}"
         # Only enable show_background if it's not already explicitly set to False
         if design.show_background is None:
             design.show_background = True
@@ -305,7 +305,7 @@ async def upload_background(
         return {
             "success": True,
             "message": "Background uploaded successfully",
-            "file_path": f"http://localhost:8000/media/portal/{filename}"
+            "file_path": f"/media/portal/{filename}"
         }
     
     except Exception as e:

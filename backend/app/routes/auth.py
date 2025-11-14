@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 import random
 import requests
@@ -28,7 +28,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
         )
     
     # Check if account is locked
-    if admin.locked_until and admin.locked_until > datetime.utcnow():
+    if admin.locked_until and admin.locked_until > datetime.now(timezone.utc):
         raise HTTPException(
             status_code=status.HTTP_423_LOCKED,
             detail=f"Account locked until {admin.locked_until}"
@@ -53,7 +53,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
         # Increment login attempts
         admin.login_attempts += 1
         if admin.login_attempts >= 5:
-            admin.locked_until = datetime.utcnow() + timedelta(minutes=30)
+            admin.locked_until = datetime.now(timezone.utc) + timedelta(minutes=30)
         db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -62,7 +62,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
     
     # Reset login attempts on successful login
     admin.login_attempts = 0
-    admin.last_login = datetime.utcnow()
+    admin.last_login = datetime.now(timezone.utc)
     admin.locked_until = None
     db.commit()
     
@@ -110,7 +110,7 @@ async def request_otp(request: OTPRequest, db: Session = Depends(get_db)):
         mobile=request.mobile,
         otp=otp_code,
         otp_type="admin_login",
-        expires_at=datetime.utcnow() + timedelta(minutes=5),
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
         ip_address=request.ip_address
     )
     db.add(otp_entry)
@@ -140,7 +140,7 @@ async def verify_otp(request: OTPVerify, db: Session = Depends(get_db)):
         OTP.otp == request.otp,
         OTP.otp_type == "admin_login",
         OTP.verified == False,
-        OTP.expires_at > datetime.utcnow()
+        OTP.expires_at > datetime.now(timezone.utc)
     ).first()
     
     if not otp_entry:
@@ -161,7 +161,7 @@ async def verify_otp(request: OTPVerify, db: Session = Depends(get_db)):
     
     # Find admin
     admin = db.query(Admin).filter(Admin.mobile == request.mobile).first()
-    admin.last_login = datetime.utcnow()
+    admin.last_login = datetime.now(timezone.utc)
     
     db.commit()
     
