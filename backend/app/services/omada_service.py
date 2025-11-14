@@ -28,37 +28,46 @@ class OmadaService:
         return f"{self.controller_url}/api/v2"
     
     def login(self) -> bool:
-        """Login to Omada controller and get auth token"""
+        """Login to Omada controller and get auth token for hotspot portal"""
         try:
-            # Try both login endpoints
+            # Try hotspot login endpoint (correct for external portal)
             login_urls = [
-                f"{self.controller_url}/{self.controller_id}/api/v2/login" if self.controller_id else None,
-                f"{self.controller_url}/api/v2/login"
+                f"{self.controller_url}/{self.controller_id}/api/v2/hotspot/login" if self.controller_id else None,
+                f"{self.controller_url}/api/v2/hotspot/login"
             ]
             
             login_urls = [url for url in login_urls if url]
             
+            # Note: Hotspot API uses 'name' not 'username'
             payload = {
-                "username": self.username,
+                "name": self.username,
                 "password": self.password
+            }
+            
+            headers = {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
             }
             
             for login_url in login_urls:
                 try:
-                    response = self.session.post(login_url, json=payload, timeout=10)
+                    logger.info(f"Attempting hotspot login at {login_url}")
+                    response = self.session.post(login_url, json=payload, headers=headers, timeout=10)
                     
                     if response.status_code == 200:
                         data = response.json()
                         if data.get('errorCode') == 0:
                             self.token = data.get('result', {}).get('token')
-                            # Set token in session headers
+                            # Set token in session headers for CSRF protection
                             self.session.headers.update({
                                 'Csrf-Token': self.token
                             })
-                            logger.info(f"Successfully logged in to Omada controller at {login_url}")
+                            logger.info(f"Successfully logged in to Omada hotspot portal at {login_url}")
                             return True
                         else:
-                            logger.error(f"Login failed at {login_url}: {data.get('msg')}")
+                            logger.error(f"Hotspot login failed at {login_url}: {data.get('msg')}")
+                    else:
+                        logger.error(f"HTTP {response.status_code} at {login_url}")
                 except Exception as e:
                     logger.error(f"Failed to connect to {login_url}: {str(e)}")
                     continue
