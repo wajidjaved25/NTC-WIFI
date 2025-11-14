@@ -130,16 +130,26 @@ class OmadaService:
         mac_address: str,
         duration: int = 3600,
         upload_limit: Optional[int] = None,
-        download_limit: Optional[int] = None
+        download_limit: Optional[int] = None,
+        ap_mac: Optional[str] = None,
+        ssid: Optional[str] = None,
+        gateway_mac: Optional[str] = None,
+        vid: Optional[str] = None,
+        radio_id: Optional[str] = None
     ) -> Dict:
-        """Authorize a client to access WiFi"""
+        """Authorize a client to access WiFi using external portal authentication"""
         try:
+            import time
+            
             print("\n" + "="*60)
-            print("=== OMADA AUTHORIZE CLIENT ===")
+            print("=== OMADA AUTHORIZE CLIENT (EXTERNAL PORTAL) ===")
             print(f"MAC Address: {mac_address}")
             print(f"Duration: {duration} seconds")
-            print(f"Upload Limit: {upload_limit}")
-            print(f"Download Limit: {download_limit}")
+            print(f"AP MAC: {ap_mac}")
+            print(f"SSID: {ssid}")
+            print(f"Gateway MAC: {gateway_mac}")
+            print(f"VID: {vid}")
+            print(f"Site: {self.site_id}")
             print(f"Current Token: {self.token}")
             print("="*60 + "\n")
             
@@ -150,16 +160,37 @@ class OmadaService:
                     return {"success": False, "message": "Authentication failed"}
                 print(f"✓ Login successful! Token: {self.token[:20]}...\n")
             
+            # Use the external portal auth endpoint
             base_url = self._get_base_api_url()
-            auth_url = f"{base_url}/hotspot/sites/{self.site_id}/clients/{mac_address}/authorize"
+            auth_url = f"{base_url}/hotspot/extPortal/auth"
             
             print(f"Authorization URL: {auth_url}")
             
-            payload = {
-                "mac": mac_address,
-                "duration": duration,  # seconds
-                "authType": 1  # External portal auth
-            }
+            # Calculate expiry time in microseconds (current time + duration)
+            expire_time = int((time.time() + duration) * 1000000)
+            
+            # Build payload based on connection type
+            if ap_mac:
+                # Wireless (EAP) connection
+                payload = {
+                    "clientMac": mac_address,
+                    "apMac": ap_mac,
+                    "ssidName": ssid or "",
+                    "radioId": radio_id or "",
+                    "site": self.site_id,
+                    "time": expire_time,
+                    "authType": 4  # External portal
+                }
+            else:
+                # Wired (Gateway) connection
+                payload = {
+                    "clientMac": mac_address,
+                    "gatewayMac": gateway_mac or "",
+                    "vid": vid or "",
+                    "site": self.site_id,
+                    "time": expire_time,
+                    "authType": 4  # External portal
+                }
             
             # Add bandwidth limits if specified
             if upload_limit:

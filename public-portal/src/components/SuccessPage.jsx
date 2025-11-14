@@ -16,9 +16,9 @@ function SuccessPage({ portalDesign, userData }) {
       
       // Get MAC address from URL params (captive portal should pass this)
       const urlParams = new URLSearchParams(window.location.search);
-      const macAddress = urlParams.get('mac') || urlParams.get('client_mac') || 'AA:BB:CC:DD:EE:FF'; // Fallback for testing
-      const apMac = urlParams.get('ap_mac');
-      const ssid = urlParams.get('ssid');
+      const macAddress = urlParams.get('mac') || urlParams.get('client_mac') || urlParams.get('clientMac') || 'AA:BB:CC:DD:EE:FF'; // Fallback for testing
+      const apMac = urlParams.get('ap_mac') || urlParams.get('apMac') || '00:00:00:00:00:01'; // Test AP MAC
+      const ssid = urlParams.get('ssid') || urlParams.get('ssidName') || 'NTC-Public-WiFi'; // Test SSID
 
       console.log('Authorization params:', { macAddress, apMac, ssid, userData });
 

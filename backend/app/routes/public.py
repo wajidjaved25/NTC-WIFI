@@ -323,7 +323,9 @@ async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
             mac_address=data.mac_address,
             duration=omada_config.session_timeout,
             upload_limit=omada_config.bandwidth_limit_up,
-            download_limit=omada_config.bandwidth_limit_down
+            download_limit=omada_config.bandwidth_limit_down,
+            ap_mac=data.ap_mac,
+            ssid=data.ssid
         )
         
         if not result.get('success'):
