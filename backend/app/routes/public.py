@@ -277,19 +277,12 @@ async def register_user(data: UserRegister, db: Session = Depends(get_db)):
 @router.post("/authorize")
 async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
     """
-    Authorize WiFi access
-    
-    NOTE: With RADIUS authentication, this endpoint is mainly for tracking.
-    Actual WiFi authentication happens through:
-    1. User connects to WiFi SSID
-    2. Omada captive portal shows
-    3. User enters mobile + CNIC/passport
-    4. Omada sends RADIUS request to FreeRADIUS
-    5. FreeRADIUS validates against radcheck table
-    6. User gets internet access
-    
-    This endpoint creates a session record for tracking purposes.
+    Authorize WiFi access through Omada External Portal API
+    This is called after successful OTP verification and registration.
     """
+    
+    print(f"\n=== AUTHORIZE REQUEST ===")
+    print(f"Received data: {data}")
     
     # Get user
     user = None
@@ -305,23 +298,23 @@ async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
     if user.is_blocked:
         raise HTTPException(status_code=403, detail="User is blocked")
     
-    # Validate MAC address
+    # MAC address is required for authorization
     if not data.mac_address:
-        data.mac_address = "unknown"
+        raise HTTPException(status_code=400, detail="MAC address is required for WiFi authorization")
     
-    # Get active Omada configuration for redirect URL
+    # Get active Omada configuration
     omada_config = db.query(OmadaConfig).filter(OmadaConfig.is_active == True).first()
-    redirect_url = omada_config.redirect_url if omada_config else "http://www.google.com"
-    session_timeout = omada_config.session_timeout if omada_config else 3600
+    if not omada_config:
+        raise HTTPException(status_code=500, detail="No active Omada configuration found")
     
-    # Create session record for tracking
+    # Create session record
     session = WiFiSession(
         user_id=user.id,
         mac_address=data.mac_address,
         ap_mac=data.ap_mac,
         ssid=data.ssid,
         start_time=datetime.now(timezone.utc),
-        session_status='active'
+        session_status='authorizing'
     )
     db.add(session)
     
@@ -332,15 +325,67 @@ async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(session)
     
-    return {
-        "success": True,
-        "message": "Please enter your credentials on the WiFi login page",
-        "session_id": session.id,
-        "duration": session_timeout,
-        "redirect_url": redirect_url,
-        "auth_method": "radius",
-        "instructions": "Authentication is handled by RADIUS. User credentials: Username=mobile, Password=CNIC/Passport"
-    }
+    # Authorize through Omada External Portal API
+    try:
+        omada = OmadaService(
+            controller_url=omada_config.controller_url,
+            username=omada_config.username,
+            encrypted_password=omada_config.password_encrypted,
+            controller_id=omada_config.controller_id,
+            site_id=omada_config.site_id
+        )
+        
+        # Authorize the client
+        result = omada.authorize_client(
+            mac_address=data.mac_address,
+            duration=omada_config.session_timeout,
+            upload_limit=omada_config.bandwidth_limit_up,
+            download_limit=omada_config.bandwidth_limit_down,
+            ap_mac=data.ap_mac,
+            ssid=data.ssid
+        )
+        
+        if result.get('success'):
+            # Update session status
+            session.session_status = 'active'
+            db.commit()
+            
+            print(f"✓ WiFi authorized successfully for {user.mobile}")
+            
+            return {
+                "success": True,
+                "message": "WiFi access authorized successfully",
+                "session_id": session.id,
+                "duration": omada_config.session_timeout,
+                "redirect_url": omada_config.redirect_url or "http://www.google.com"
+            }
+        else:
+            # Authorization failed
+            session.session_status = 'failed'
+            session.end_time = datetime.now(timezone.utc)
+            db.commit()
+            
+            print(f"✗ WiFi authorization failed: {result.get('message')}")
+            
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to authorize WiFi: {result.get('message')}"
+            )
+    
+    except Exception as e:
+        # Rollback session on error
+        session.session_status = 'failed'
+        session.end_time = datetime.now(timezone.utc)
+        db.commit()
+        
+        print(f"✗ Authorization error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        
+        raise HTTPException(
+            status_code=500,
+            detail=f"Authorization error: {str(e)}"
+        )
 
 
 # ========== ADVERTISEMENTS ==========
