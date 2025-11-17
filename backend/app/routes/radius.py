@@ -9,13 +9,17 @@ from typing import List, Dict
 
 from ..database import get_db
 from ..services.radius_service import RadiusService
-from ..dependencies import verify_token, verify_admin_or_superadmin
+from ..utils.security import get_current_user
+from ..models.admin import Admin
 
 router = APIRouter(prefix="/radius", tags=["RADIUS Management"])
 
 
-@router.get("/sessions/active", dependencies=[Depends(verify_token)])
-async def get_active_sessions(db: Session = Depends(get_db)):
+@router.get("/sessions/active")
+async def get_active_sessions(
+    current_user: Admin = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """Get all currently active RADIUS sessions"""
     
     radius_service = RadiusService(db)
@@ -28,8 +32,12 @@ async def get_active_sessions(db: Session = Depends(get_db)):
     }
 
 
-@router.get("/sessions/user/{username}", dependencies=[Depends(verify_token)])
-async def get_user_sessions(username: str, db: Session = Depends(get_db)):
+@router.get("/sessions/user/{username}")
+async def get_user_sessions(
+    username: str,
+    current_user: Admin = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """Get session history for a specific user"""
     
     radius_service = RadiusService(db)
@@ -43,9 +51,17 @@ async def get_user_sessions(username: str, db: Session = Depends(get_db)):
     }
 
 
-@router.post("/sessions/disconnect/{username}", dependencies=[Depends(verify_admin_or_superadmin)])
-async def disconnect_user(username: str, db: Session = Depends(get_db)):
-    """Disconnect a user from WiFi"""
+@router.post("/sessions/disconnect/{username}")
+async def disconnect_user(
+    username: str,
+    current_user: Admin = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Disconnect a user from WiFi (admin and superadmin only)"""
+    
+    # Check if user has admin privileges
+    if current_user.role not in ["admin", "superadmin"]:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
     
     radius_service = RadiusService(db)
     
@@ -61,13 +77,18 @@ async def disconnect_user(username: str, db: Session = Depends(get_db)):
     }
 
 
-@router.patch("/users/{username}/timeout", dependencies=[Depends(verify_admin_or_superadmin)])
+@router.patch("/users/{username}/timeout")
 async def update_session_timeout(
     username: str,
     timeout: int,
+    current_user: Admin = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Update session timeout for a user"""
+    """Update session timeout for a user (admin and superadmin only)"""
+    
+    # Check if user has admin privileges
+    if current_user.role not in ["admin", "superadmin"]:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
     
     if timeout < 60 or timeout > 86400:
         raise HTTPException(
@@ -88,9 +109,17 @@ async def update_session_timeout(
     }
 
 
-@router.delete("/users/{username}", dependencies=[Depends(verify_admin_or_superadmin)])
-async def delete_radius_user(username: str, db: Session = Depends(get_db)):
-    """Delete RADIUS user account"""
+@router.delete("/users/{username}")
+async def delete_radius_user(
+    username: str,
+    current_user: Admin = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete RADIUS user account (admin and superadmin only)"""
+    
+    # Check if user has admin privileges
+    if current_user.role not in ["admin", "superadmin"]:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
     
     radius_service = RadiusService(db)
     
