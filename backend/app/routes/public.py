@@ -92,7 +92,6 @@ async def get_portal_design(db: Session = Depends(get_db)):
     ).order_by(PortalDesign.updated_at.desc()).first()
     
     if not design:
-        # Return default design if none active
         return {
             "template_name": "Default",
             "welcome_title": "Welcome to Free WiFi",
@@ -134,27 +133,16 @@ async def get_portal_design(db: Session = Depends(get_db)):
 async def send_otp(data: OTPRequest, db: Session = Depends(get_db)):
     """Send OTP to mobile number"""
     
-    print(f"\n=== SEND OTP REQUEST ===")
-    print(f"Mobile: {data.mobile}")
-    
     try:
-        # Validate mobile format
         mobile = data.mobile.strip()
-        print(f"Stripped mobile: {mobile}")
         
         if not mobile.startswith('03') or len(mobile) != 11:
-            print(f"Invalid mobile format: {mobile}")
-            raise HTTPException(status_code=400, detail="Invalid mobile number format (use 03XXXXXXXXX)")
+            raise HTTPException(status_code=400, detail="Invalid mobile number format")
         
-        # Generate OTP
         otp_code = generate_otp()
-        print(f"Generated OTP: {otp_code}")
         
-        # Delete old OTPs for this mobile
         db.query(OTP).filter(OTP.mobile == mobile).delete()
-        print(f"Deleted old OTPs")
         
-        # Create new OTP (note: column is 'otp' not 'otp_code')
         new_otp = OTP(
             mobile=mobile,
             otp=otp_code,
@@ -162,28 +150,17 @@ async def send_otp(data: OTPRequest, db: Session = Depends(get_db)):
         )
         db.add(new_otp)
         db.commit()
-        print(f"OTP saved to database")
         
-        # Send SMS
         try:
-            print(f"Attempting to send SMS...")
-            result = await send_otp_sms(mobile, otp_code)
-            print(f"SMS result: {result}")
+            await send_otp_sms(mobile, otp_code)
         except Exception as e:
-            # Log error but don't fail - OTP is still valid
-            print(f"SMS sending failed: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"SMS failed: {e}")
         
-        print(f"Returning success response")
         return {"success": True, "message": "OTP sent successfully"}
     
     except HTTPException:
         raise
     except Exception as e:
-        print(f"\nERROR in send_otp: {e}")
-        import traceback
-        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -194,7 +171,6 @@ async def verify_otp(data: OTPVerify, db: Session = Depends(get_db)):
     mobile = data.mobile.strip()
     otp_code = data.otp.strip()
     
-    # Find OTP (note: column is 'otp' not 'otp_code', and 'verified' not 'is_used')
     otp_record = db.query(OTP).filter(
         OTP.mobile == mobile,
         OTP.otp == otp_code,
@@ -205,7 +181,6 @@ async def verify_otp(data: OTPVerify, db: Session = Depends(get_db)):
     if not otp_record:
         raise HTTPException(status_code=400, detail="Invalid or expired OTP")
     
-    # Mark as verified
     otp_record.verified = True
     db.commit()
     
@@ -214,15 +189,13 @@ async def verify_otp(data: OTPVerify, db: Session = Depends(get_db)):
 
 @router.post("/register")
 async def register_user(data: UserRegister, db: Session = Depends(get_db)):
-    """Register or update user and create RADIUS account"""
+    """Register user and create RADIUS account"""
     
     mobile = data.mobile.strip()
     
-    # Check if user exists
     user = db.query(User).filter(User.mobile == mobile).first()
     
     if user:
-        # Update existing user
         user.name = data.name
         user.id_type = data.id_type
         user.cnic = data.cnic if data.id_type == 'cnic' else None
@@ -231,7 +204,6 @@ async def register_user(data: UserRegister, db: Session = Depends(get_db)):
         user.terms_accepted_at = datetime.now(timezone.utc)
         user.last_login = datetime.now(timezone.utc)
     else:
-        # Create new user
         user = User(
             name=data.name,
             mobile=mobile,
@@ -247,7 +219,7 @@ async def register_user(data: UserRegister, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
     
-    # Create RADIUS user for WiFi authentication
+    # Create RADIUS user
     radius_password = data.cnic if data.id_type == 'cnic' else data.passport
     radius_service = RadiusService(db)
     
@@ -255,15 +227,15 @@ async def register_user(data: UserRegister, db: Session = Depends(get_db)):
         radius_created = radius_service.create_radius_user(
             username=mobile,
             password=radius_password,
-            session_timeout=3600  # 1 hour session by default
+            session_timeout=3600
         )
         
         if radius_created:
-            print(f"✓ Created RADIUS user: {mobile}")
+            print(f"✓ RADIUS user created: {mobile}")
         else:
-            print(f"✗ Failed to create RADIUS user for {mobile}")
+            print(f"✗ RADIUS user creation failed: {mobile}")
     except Exception as e:
-        print(f"✗ RADIUS error for {mobile}: {e}")
+        print(f"✗ RADIUS error: {e}")
     
     return {
         "success": True,
@@ -278,22 +250,16 @@ async def register_user(data: UserRegister, db: Session = Depends(get_db)):
 @router.post("/authorize")
 async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
     """
-    Authorize WiFi access through RADIUS authentication + Omada External Portal API
+    Authorize WiFi via RADIUS authentication
     
-    This performs background RADIUS authentication then authorizes the MAC address
-    through Omada's External Portal API for immediate access.
+    When Omada uses RADIUS auth, Access-Accept grants network access automatically
     """
     
-    print(f"\n" + "="*60)
-    print(f"=== WIFI AUTHORIZATION REQUEST ===")
-    print(f"User ID: {data.user_id}")
+    print(f"\n{'='*60}")
+    print(f"=== WIFI AUTHORIZATION ===")
     print(f"Mobile: {data.mobile}")
-    print(f"MAC: {data.mac_address}")
-    print(f"AP MAC: {data.ap_mac}")
-    print(f"SSID: {data.ssid}")
-    print("="*60 + "\n")
+    print(f"{'='*60}\n")
     
-    # Get user
     user = None
     if data.user_id:
         user = db.query(User).filter(User.id == data.user_id).first()
@@ -303,26 +269,18 @@ async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    # Check if user is blocked
     if user.is_blocked:
         raise HTTPException(status_code=403, detail="User is blocked")
     
-    # MAC address is required
-    if not data.mac_address:
-        raise HTTPException(status_code=400, detail="MAC address is required for WiFi authorization")
-    
-    # Get active Omada configuration
     omada_config = db.query(OmadaConfig).filter(OmadaConfig.is_active == True).first()
     if not omada_config:
-        raise HTTPException(status_code=500, detail="No active Omada configuration found")
+        raise HTTPException(status_code=500, detail="No Omada configuration")
     
-    # Get user's password (CNIC or passport)
     user_password = user.cnic if user.id_type == 'cnic' else user.passport
     
-    # Create session record
     session = WiFiSession(
         user_id=user.id,
-        mac_address=data.mac_address,
+        mac_address=data.mac_address or "pending",
         ap_mac=data.ap_mac,
         ssid=data.ssid,
         start_time=datetime.now(timezone.utc),
@@ -333,109 +291,66 @@ async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
     db.refresh(session)
     
     try:
-        # Step 1: Authenticate via RADIUS (background - validates credentials)
-        print("\n[Step 1] Performing RADIUS authentication...")
+        print("[RADIUS Authentication]")
         radius_client = RadiusAuthClient(
             radius_server="127.0.0.1",
-            radius_secret="testing123"  # Use your actual RADIUS secret
+            radius_secret="testing123"
         )
         
         radius_result = radius_client.authenticate(
             username=user.mobile,
             password=user_password,
-            nas_ip=omada_config.controller_url.split('//')[1].split(':')[0]  # Extract IP from URL
+            nas_ip="192.168.3.50"
         )
         
         if not radius_result.get('success'):
             session.session_status = 'failed'
             session.end_time = datetime.now(timezone.utc)
             db.commit()
-            
             raise HTTPException(
                 status_code=401,
-                detail=f"RADIUS authentication failed: {radius_result.get('message')}"
+                detail=f"RADIUS failed: {radius_result.get('message')}"
             )
         
-        print(f"\u2713 RADIUS authentication successful")
+        print(f"✓ RADIUS authenticated")
         
-        # Step 2: Authorize MAC address through Omada External Portal API
-        print("\n[Step 2] Authorizing MAC address via Omada External Portal API...")
-        omada = OmadaService(
-            controller_url=omada_config.controller_url,
-            username=omada_config.username,
-            encrypted_password=omada_config.password_encrypted,
-            controller_id=omada_config.controller_id,
-            site_id=omada_config.site_id
-        )
-        
-        omada_result = omada.authorize_client(
-            mac_address=data.mac_address,
-            duration=radius_result.get('session_timeout', omada_config.session_timeout),
-            upload_limit=omada_config.bandwidth_limit_up,
-            download_limit=omada_config.bandwidth_limit_down,
-            ap_mac=data.ap_mac,
-            ssid=data.ssid
-        )
-        
-        if not omada_result.get('success'):
-            session.session_status = 'failed'
-            session.end_time = datetime.now(timezone.utc)
-            db.commit()
-            
-            raise HTTPException(
-                status_code=500,
-                detail=f"Omada authorization failed: {omada_result.get('message')}"
-            )
-        
-        print(f"\u2713 Omada authorization successful")
-        
-        # Update session status and user stats
         session.session_status = 'active'
         user.total_sessions += 1
         user.last_login = datetime.now(timezone.utc)
         db.commit()
         
-        print(f"\n" + "="*60)
-        print(f"\u2713\u2713\u2713 AUTHORIZATION COMPLETE \u2713\u2713\u2713")
+        print(f"\n{'='*60}")
+        print(f"✓✓✓ AUTHORIZED ✓✓✓")
         print(f"User: {user.mobile}")
-        print(f"MAC: {data.mac_address}")
-        print(f"Session ID: {session.id}")
-        print(f"Duration: {radius_result.get('session_timeout')} seconds")
-        print("="*60 + "\n")
+        print(f"Duration: {radius_result.get('session_timeout')}s")
+        print(f"{'='*60}\n")
         
         return {
             "success": True,
-            "message": "WiFi access authorized successfully",
+            "message": "WiFi authorized via RADIUS",
             "session_id": session.id,
-            "duration": radius_result.get('session_timeout', omada_config.session_timeout),
+            "duration": radius_result.get('session_timeout', 3600),
             "redirect_url": omada_config.redirect_url or "http://www.google.com",
-            "auth_method": "radius+external_portal"
+            "auth_method": "radius"
         }
     
     except HTTPException:
         raise
-    
     except Exception as e:
-        # Rollback session on error
         session.session_status = 'failed'
         session.end_time = datetime.now(timezone.utc)
         db.commit()
-        
-        print(f"\n\u2717 Authorization error: {str(e)}")
+        print(f"\n✗ Error: {e}")
         import traceback
         traceback.print_exc()
-        
-        raise HTTPException(
-            status_code=500,
-            detail=f"Authorization error: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ========== ADVERTISEMENTS ==========
 
 @router.get("/ads/active")
 async def get_active_ads(db: Session = Depends(get_db)):
-    """Get active advertisements for display"""
+    """Get active ads"""
     
     now = datetime.now(timezone.utc)
     
@@ -447,7 +362,6 @@ async def get_active_ads(db: Session = Depends(get_db)):
     
     import os
     
-    # Return wrapped in object to match frontend expectations
     return {
         "success": True,
         "ads": [{
@@ -465,31 +379,21 @@ async def get_active_ads(db: Session = Depends(get_db)):
 
 
 @router.post("/ads/track")
-async def track_ad(
-    data: AdTrack,
-    request: Request,
-    db: Session = Depends(get_db)
-):
-    """Track ad event (view, click, skip, complete)"""
+async def track_ad(data: AdTrack, request: Request, db: Session = Depends(get_db)):
+    """Track ad event"""
     
-    # Get client info
-    ip_address = request.client.host
-    user_agent = request.headers.get("user-agent")
-    
-    # Create analytics record
     analytics = AdAnalytics(
         ad_id=data.ad_id,
         event_type=data.event_type,
         user_id=data.user_id,
         mac_address=data.mac_address,
         watch_duration=data.watch_duration,
-        ip_address=ip_address,
-        user_agent=user_agent,
+        ip_address=request.client.host,
+        user_agent=request.headers.get("user-agent"),
         event_timestamp=datetime.now(timezone.utc)
     )
     db.add(analytics)
     
-    # Update ad counters
     ad = db.query(Advertisement).filter(Advertisement.id == data.ad_id).first()
     if ad:
         if data.event_type == 'view':
@@ -500,145 +404,9 @@ async def track_ad(
             ad.skip_count += 1
     
     db.commit()
-    
     return {"success": True}
 
 
-# ========== LEGACY ENDPOINTS (for PHP portal) ==========
-
-@router.get("/ads")
-async def get_ads(
-    user_id: Optional[int] = None,
-    mac_address: Optional[str] = None,
-    db: Session = Depends(get_db)
-):
-    """Get active advertisements (legacy endpoint)"""
-    
-    now = datetime.now(timezone.utc)
-    
-    ads = db.query(Advertisement).filter(
-        Advertisement.is_active == True,
-        func.coalesce(Advertisement.start_date, now) <= now,
-        func.coalesce(Advertisement.end_date, now + timedelta(days=365)) >= now
-    ).order_by(Advertisement.display_order).all()
-    
-    import os
-    
-    return {
-        "success": True,
-        "count": len(ads),
-        "ads": [{
-            "id": ad.id,
-            "title": ad.title,
-            "description": ad.description,
-            "ad_type": ad.ad_type,
-            "file_path": f"/media/ads/{os.path.basename(ad.file_path)}",
-            "link_url": getattr(ad, 'link_url', None),
-            "display_duration": ad.display_duration
-        } for ad in ads]
-    }
-
-
-@router.post("/ads/track/view")
-async def track_ad_view(
-    data: AdViewTrack,
-    request: Request,
-    db: Session = Depends(get_db)
-):
-    """Track when an ad is viewed"""
-    
-    ad_service = AdDisplayService(db)
-    
-    ip_address = request.client.host
-    user_agent = request.headers.get("user-agent")
-    
-    success = await ad_service.track_ad_view(
-        ad_id=data.ad_id,
-        user_id=data.user_id,
-        mac_address=data.mac_address,
-        ip_address=ip_address,
-        user_agent=user_agent
-    )
-    
-    return {"success": success}
-
-
-@router.post("/ads/track/click")
-async def track_ad_click(
-    data: AdClickTrack,
-    request: Request,
-    db: Session = Depends(get_db)
-):
-    """Track when an ad is clicked"""
-    
-    ad_service = AdDisplayService(db)
-    
-    ip_address = request.client.host
-    user_agent = request.headers.get("user-agent")
-    
-    success = await ad_service.track_ad_click(
-        ad_id=data.ad_id,
-        user_id=data.user_id,
-        mac_address=data.mac_address,
-        ip_address=ip_address,
-        user_agent=user_agent
-    )
-    
-    return {"success": success}
-
-
-@router.post("/ads/track/skip")
-async def track_ad_skip(
-    data: AdSkipTrack,
-    request: Request,
-    db: Session = Depends(get_db)
-):
-    """Track when an ad is skipped"""
-    
-    ad_service = AdDisplayService(db)
-    
-    ip_address = request.client.host
-    user_agent = request.headers.get("user-agent")
-    
-    success = await ad_service.track_ad_skip(
-        ad_id=data.ad_id,
-        watch_duration=data.watch_duration,
-        user_id=data.user_id,
-        mac_address=data.mac_address,
-        ip_address=ip_address,
-        user_agent=user_agent
-    )
-    
-    return {"success": success}
-
-
-@router.post("/ads/track/complete")
-async def track_ad_complete(
-    data: AdCompleteTrack,
-    request: Request,
-    db: Session = Depends(get_db)
-):
-    """Track when an ad is watched completely"""
-    
-    ad_service = AdDisplayService(db)
-    
-    ip_address = request.client.host
-    user_agent = request.headers.get("user-agent")
-    
-    success = await ad_service.track_ad_complete(
-        ad_id=data.ad_id,
-        watch_duration=data.watch_duration,
-        user_id=data.user_id,
-        mac_address=data.mac_address,
-        ip_address=ip_address,
-        user_agent=user_agent
-    )
-    
-    return {"success": success}
-
-
-# Health check
 @router.get("/health")
 async def health_check():
-    """Simple health check endpoint"""
     return {"status": "ok", "service": "ntc-wifi-portal"}
