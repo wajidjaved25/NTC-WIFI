@@ -11,7 +11,7 @@ from typing import Dict, Optional
 class RadiusAuthClient:
     """Client for performing RADIUS authentication programmatically"""
     
-    def __init__(self, radius_server: str = "127.0.0.1", radius_secret: str = "testing123"):
+    def __init__(self, radius_server: str = "127.0.0.1", radius_secret: str = "MySecretRadius2024!"):
         self.radius_server = radius_server
         self.radius_secret = radius_secret
     
@@ -19,7 +19,7 @@ class RadiusAuthClient:
         self,
         username: str,
         password: str,
-        nas_ip: str = "192.168.3.50"  # Omada controller IP
+        nas_ip: str = "192.168.3.254:8043"  # Omada controller IP
     ) -> Dict:
         """
         Authenticate user via RADIUS using radclient
