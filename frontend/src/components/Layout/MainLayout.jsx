@@ -7,6 +7,7 @@ import {
   SkinOutlined,
   TeamOutlined,
   LogoutOutlined,
+  WifiOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useLocation } from 'react-router-dom'
 import './MainLayout.css'
@@ -60,6 +61,15 @@ function MainLayout({ children, user, onLogout }) {
       })
     }
 
+    // RADIUS Sessions - superadmin & admin only
+    if (['superadmin', 'admin'].includes(user.role)) {
+      items.push({
+        key: '/radius-sessions',
+        icon: <WifiOutlined />,
+        label: 'Active Sessions',
+      })
+    }
+
     // Admin Management - superadmin only
     if (user.role === 'superadmin') {
       items.push({
@@ -102,6 +112,7 @@ function MainLayout({ children, user, onLogout }) {
               {location.pathname === '/records' && 'Session Records'}
               {location.pathname === '/advertisements' && 'Advertisement Management'}
               {location.pathname === '/portal-design' && 'Portal Design'}
+              {location.pathname === '/radius-sessions' && 'Active RADIUS Sessions'}
               {location.pathname === '/admin-management' && 'Admin Management'}
             </div>
             <div className="header-user">
