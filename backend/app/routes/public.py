@@ -291,28 +291,9 @@ async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
     db.refresh(session)
     
     try:
-        print("[RADIUS Authentication]")
-        radius_client = RadiusAuthClient(
-            radius_server="127.0.0.1",
-            radius_secret="testing123"
-        )
-        
-        radius_result = radius_client.authenticate(
-            username=user.mobile,
-            password=user_password,
-            nas_ip="192.168.3.254"
-        )
-        
-        if not radius_result.get('success'):
-            session.session_status = 'failed'
-            session.end_time = datetime.now(timezone.utc)
-            db.commit()
-            raise HTTPException(
-                status_code=401,
-                detail=f"RADIUS failed: {radius_result.get('message')}"
-            )
-        
-        print(f"✓ RADIUS authenticated")
+        # User credentials are already in RADIUS database
+        # Omada controller will authenticate directly with RADIUS server
+        # We just log the session and redirect
         
         session.session_status = 'active'
         user.total_sessions += 1
@@ -322,16 +303,18 @@ async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
         print(f"\n{'='*60}")
         print(f"✓✓✓ AUTHORIZED ✓✓✓")
         print(f"User: {user.mobile}")
-        print(f"Duration: {radius_result.get('session_timeout')}s")
+        print(f"RADIUS auth will be handled by Omada Controller")
         print(f"{'='*60}\n")
         
         return {
             "success": True,
-            "message": "WiFi authorized via RADIUS",
+            "message": "Registration complete - connecting to WiFi",
             "session_id": session.id,
-            "duration": radius_result.get('session_timeout', 3600),
+            "duration": 3600,
             "redirect_url": omada_config.redirect_url or "http://www.google.com",
-            "auth_method": "radius"
+            "auth_method": "radius",
+            "username": user.mobile,
+            "note": "Omada will authenticate via RADIUS"
         }
     
     except HTTPException:
