@@ -21,6 +21,7 @@ from ..services.ad_service import AdDisplayService
 from ..services.omada_service import OmadaService
 from ..models.omada_config import OmadaConfig
 from ..utils.helpers import send_otp_sms, generate_otp
+from ..utils.radius import create_radius_user
 
 router = APIRouter(prefix="/public", tags=["Public API"])
 
@@ -212,7 +213,7 @@ async def verify_otp(data: OTPVerify, db: Session = Depends(get_db)):
 
 @router.post("/register")
 async def register_user(data: UserRegister, db: Session = Depends(get_db)):
-    """Register or update user"""
+    """Register or update user and create RADIUS account"""
     
     mobile = data.mobile.strip()
     
@@ -244,6 +245,17 @@ async def register_user(data: UserRegister, db: Session = Depends(get_db)):
     
     db.commit()
     db.refresh(user)
+    
+    # Create RADIUS user for WiFi authentication
+    radius_password = data.cnic if data.id_type == 'cnic' else data.passport
+    radius_created = create_radius_user(
+        username=mobile,
+        password=radius_password,
+        session_timeout=3600  # 1 hour session by default
+    )
+    
+    if not radius_created:
+        print(f"Warning: Failed to create RADIUS user for {mobile}")
     
     return {
         "success": True,
