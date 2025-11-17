@@ -294,7 +294,7 @@ async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
         print("[RADIUS Authentication]")
         radius_client = RadiusAuthClient(
             radius_server="127.0.0.1",
-            radius_secret="MySecretRadius2024!"
+            radius_secret="testing123"
         )
         
         radius_result = radius_client.authenticate(

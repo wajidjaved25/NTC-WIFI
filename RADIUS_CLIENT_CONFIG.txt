@@ -1,0 +1,38 @@
+# RADIUS CLIENT CONFIGURATION
+# Add this to your FreeRADIUS server's /etc/freeradius/3.0/clients.conf
+
+# ============================================================
+# LOCALHOST CLIENT (for testing from same server)
+# ============================================================
+client localhost {
+    ipaddr = 127.0.0.1
+    secret = testing123
+    require_message_authenticator = no
+    nastype = other
+    shortname = localhost
+}
+
+# ============================================================
+# OMADA CONTROLLER (for production WiFi authentication)
+# ============================================================
+client omada_controller {
+    ipaddr = 192.168.3.254
+    secret = MySecretRadius2024!
+    require_message_authenticator = no
+    nastype = other
+    shortname = omada
+}
+
+# ============================================================
+# NOTES
+# ============================================================
+# 1. The localhost client allows your backend API (running on same server) 
+#    to test RADIUS authentication
+#
+# 2. The Omada controller client is for actual WiFi authentication
+#
+# 3. After adding these, restart FreeRADIUS:
+#    sudo systemctl restart freeradius
+#
+# 4. Test with:
+#    echo "User-Name=test,User-Password=test" | radclient -x 127.0.0.1:1812 auth testing123

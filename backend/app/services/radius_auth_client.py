@@ -11,7 +11,7 @@ from typing import Dict, Optional
 class RadiusAuthClient:
     """Client for performing RADIUS authentication programmatically"""
     
-    def __init__(self, radius_server: str = "127.0.0.1", radius_secret: str = "MySecretRadius2024!"):
+    def __init__(self, radius_server: str = "127.0.0.1", radius_secret: str = "testing123"):
         self.radius_server = radius_server
         self.radius_secret = radius_secret
     
