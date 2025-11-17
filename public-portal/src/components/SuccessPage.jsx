@@ -1,52 +1,37 @@
 import { useState, useEffect } from 'react';
-import { authorizeWiFi } from '../services/api';
 
 function SuccessPage({ portalDesign, userData }) {
-  const [authorizing, setAuthorizing] = useState(true);
-  const [authorized, setAuthorized] = useState(false);
-  const [error, setError] = useState('');
+  const [countdown, setCountdown] = useState(5);
 
   useEffect(() => {
-    handleAuthorization();
+    // Countdown timer
+    const timer = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          redirectToOmada();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
   }, []);
 
-  const handleAuthorization = async () => {
-    try {
-      setAuthorizing(true);
-      
-      // Get MAC address from URL params (captive portal should pass this)
-      const urlParams = new URLSearchParams(window.location.search);
-      const macAddress = urlParams.get('mac') || urlParams.get('client_mac') || urlParams.get('clientMac') || 'AA:BB:CC:DD:EE:FF'; // Fallback for testing
-      const apMac = urlParams.get('ap_mac') || urlParams.get('apMac') || '00:00:00:00:00:01'; // Test AP MAC
-      const ssid = urlParams.get('ssid') || urlParams.get('ssidName') || 'NTC-Public-WiFi'; // Test SSID
+  const redirectToOmada = () => {
+    // Get URL params from Omada captive portal
+    const urlParams = new URLSearchParams(window.location.search);
+    
+    // Omada captive portal URL - user needs to login here with mobile + CNIC
+    // This redirects to Omada's built-in login page where RADIUS authentication happens
+    const redirectUrl = urlParams.get('url') || 'http://192.168.3.1:8843/';
+    
+    window.location.href = redirectUrl;
+  };
 
-      console.log('Authorization params:', { macAddress, apMac, ssid, userData });
-
-      // Authorize WiFi access
-      await authorizeWiFi({
-        user_id: userData?.id,
-        mobile: userData?.mobile,
-        mac_address: macAddress,
-        ap_mac: apMac,
-        ssid: ssid,
-      });
-
-      setAuthorized(true);
-      setError('');
-
-      // Redirect after 3 seconds
-      setTimeout(() => {
-        // Try to redirect to original URL
-        const redirectUrl = urlParams.get('url') || 'http://www.google.com';
-        window.location.href = redirectUrl;
-      }, 3000);
-    } catch (err) {
-      console.error('Authorization failed:', err);
-      setError('Failed to authorize WiFi access. Please try again or contact support.');
-      setAuthorized(false);
-    } finally {
-      setAuthorizing(false);
-    }
+  const handleManualContinue = () => {
+    redirectToOmada();
   };
 
   return (
@@ -60,64 +45,71 @@ function SuccessPage({ portalDesign, userData }) {
           />
         )}
         <h1 className="portal-title" style={{ color: portalDesign?.primary_color }}>
-          {authorizing ? 'Connecting...' : authorized ? 'Connected!' : 'Connection Failed'}
+          Registration Complete!
         </h1>
       </div>
 
       <div className="portal-body">
-        {authorizing && (
-          <div className="loading">
-            <div className="spinner"></div>
-            <p>Authorizing WiFi access...</p>
-          </div>
-        )}
+        <div className="message message-success">
+          ✓ Your account has been created successfully!
+        </div>
+        
+        <div style={{ textAlign: 'center', padding: '20px 0' }}>
+          <svg
+            width="80"
+            height="80"
+            viewBox="0 0 80 80"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            style={{ margin: '0 auto 20px' }}
+          >
+            <circle cx="40" cy="40" r="40" fill="#52c41a" fillOpacity="0.1" />
+            <path
+              d="M25 40L35 50L55 30"
+              stroke="#52c41a"
+              strokeWidth="4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          <h3 style={{ marginBottom: '10px' }}>Welcome, {userData?.name}!</h3>
+        </div>
 
-        {!authorizing && authorized && (
-          <>
-            <div className="message message-success">
-              ✓ You are now connected to WiFi!
-            </div>
-            <div style={{ textAlign: 'center', padding: '20px 0' }}>
-              <svg
-                width="80"
-                height="80"
-                viewBox="0 0 80 80"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                style={{ margin: '0 auto 20px' }}
-              >
-                <circle cx="40" cy="40" r="40" fill="#52c41a" fillOpacity="0.1" />
-                <path
-                  d="M25 40L35 50L55 30"
-                  stroke="#52c41a"
-                  strokeWidth="4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              <h3 style={{ marginBottom: '10px' }}>Welcome, {userData?.name}!</h3>
-              <p style={{ color: '#666' }}>Redirecting you to the internet...</p>
-            </div>
-            <div style={{ textAlign: 'center', fontSize: '13px', color: '#999' }}>
-              <p>Session Details:</p>
-              <p>Mobile: {userData?.mobile}</p>
-              <p>Time Limit: 1 hour</p>
-            </div>
-          </>
-        )}
+        <div style={{ 
+          background: '#f0f5ff', 
+          border: '1px solid #adc6ff',
+          borderRadius: '8px',
+          padding: '20px', 
+          marginBottom: '20px',
+          textAlign: 'left'
+        }}>
+          <h4 style={{ marginBottom: '12px', color: '#1890ff' }}>📱 WiFi Login Instructions:</h4>
+          <ol style={{ marginLeft: '20px', lineHeight: '1.8' }}>
+            <li>You will be redirected to the WiFi login page</li>
+            <li>Enter your credentials:
+              <ul style={{ marginLeft: '20px', marginTop: '8px' }}>
+                <li><strong>Username:</strong> {userData?.mobile}</li>
+                <li><strong>Password:</strong> {userData?.id_type === 'cnic' ? userData?.cnic : userData?.passport}</li>
+              </ul>
+            </li>
+            <li>Click "Login" to connect to WiFi</li>
+            <li>Enjoy 1 hour of free internet access!</li>
+          </ol>
+        </div>
 
-        {!authorizing && error && (
-          <>
-            <div className="message message-error">{error}</div>
-            <button
-              className="btn btn-primary"
-              onClick={handleAuthorization}
-              style={{ background: portalDesign?.primary_color }}
-            >
-              Try Again
-            </button>
-          </>
-        )}
+        <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+          <p style={{ fontSize: '16px', fontWeight: 'bold', color: '#1890ff' }}>
+            Redirecting in {countdown} seconds...
+          </p>
+        </div>
+
+        <button
+          className="btn btn-primary"
+          onClick={handleManualContinue}
+          style={{ background: portalDesign?.primary_color }}
+        >
+          Continue to WiFi Login
+        </button>
       </div>
     </>
   );
