@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, or_
+from sqlalchemy import func, and_, or_, text
 from datetime import datetime, timedelta, date
 from typing import List, Optional
 import io
@@ -121,83 +121,189 @@ async def get_sessions(
     current_user: Admin = Depends(require_reports_permission),
     db: Session = Depends(get_db)
 ):
-    # Build query
-    query = db.query(
-        WiFiSession,
-        User.name,
-        User.mobile,
-        User.cnic,
-        User.passport
+    """
+    Get sessions from both WiFi sessions table AND RADIUS accounting table (merged)
+    """
+    
+    # Get sessions from WiFi sessions table
+    wifi_query = db.query(
+        WiFiSession.id.label('session_id'),
+        WiFiSession.user_id,
+        User.name.label('user_name'),
+        User.mobile.label('user_mobile'),
+        User.cnic.label('user_cnic'),
+        User.passport.label('user_passport'),
+        WiFiSession.mac_address,
+        WiFiSession.start_time,
+        WiFiSession.end_time,
+        WiFiSession.duration,
+        WiFiSession.data_upload,
+        WiFiSession.data_download,
+        WiFiSession.total_data,
+        WiFiSession.session_status,
+        WiFiSession.disconnect_reason
     ).outerjoin(User, WiFiSession.user_id == User.id)
     
-    # Apply filters
-    conditions = []
+    # Apply filters to WiFi sessions
+    wifi_conditions = []
     
     if start_date:
         start_datetime = datetime.combine(datetime.fromisoformat(start_date).date(), datetime.min.time())
-        conditions.append(WiFiSession.start_time >= start_datetime)
+        wifi_conditions.append(WiFiSession.start_time >= start_datetime)
     
     if end_date:
         end_datetime = datetime.combine(datetime.fromisoformat(end_date).date(), datetime.max.time())
-        conditions.append(WiFiSession.start_time <= end_datetime)
+        wifi_conditions.append(WiFiSession.start_time <= end_datetime)
     
     if mobile:
-        conditions.append(User.mobile.like(f"%{mobile}%"))
+        wifi_conditions.append(User.mobile.like(f"%{mobile}%"))
     
     if cnic:
-        conditions.append(User.cnic.like(f"%{cnic}%"))
+        wifi_conditions.append(User.cnic.like(f"%{cnic}%"))
     
     if passport:
-        conditions.append(User.passport.like(f"%{passport}%"))
+        wifi_conditions.append(User.passport.like(f"%{passport}%"))
     
     if mac_address:
-        conditions.append(WiFiSession.mac_address.like(f"%{mac_address}%"))
+        wifi_conditions.append(WiFiSession.mac_address.like(f"%{mac_address}%"))
     
     if status:
-        conditions.append(WiFiSession.session_status == status)
+        wifi_conditions.append(WiFiSession.session_status == status)
     
     if min_duration:
-        conditions.append(WiFiSession.duration >= min_duration)
+        wifi_conditions.append(WiFiSession.duration >= min_duration)
     
     if max_duration:
-        conditions.append(WiFiSession.duration <= max_duration)
+        wifi_conditions.append(WiFiSession.duration <= max_duration)
     
-    if conditions:
-        query = query.filter(and_(*conditions))
+    if wifi_conditions:
+        wifi_query = wifi_query.filter(and_(*wifi_conditions))
     
-    # Get total count
-    total_count = query.count()
+    wifi_sessions = wifi_query.all()
     
-    # Apply pagination
-    offset = (page - 1) * page_size
-    results = query.order_by(WiFiSession.start_time.desc()).offset(offset).limit(page_size).all()
+    # Get sessions from RADIUS accounting table
+    radius_query = """
+        SELECT 
+            ra.radacctid as session_id,
+            u.id as user_id,
+            u.name as user_name,
+            ra.username as user_mobile,
+            u.cnic as user_cnic,
+            u.passport as user_passport,
+            ra.callingstationid as mac_address,
+            ra.acctstarttime as start_time,
+            ra.acctstoptime as end_time,
+            ra.acctsessiontime as duration,
+            ra.acctinputoctets as data_upload,
+            ra.acctoutputoctets as data_download,
+            (ra.acctinputoctets + ra.acctoutputoctets) as total_data,
+            CASE 
+                WHEN ra.acctstoptime IS NULL THEN 'active'
+                ELSE 'completed'
+            END as session_status,
+            ra.acctterminatecause as disconnect_reason
+        FROM radacct ra
+        LEFT JOIN users u ON ra.username = u.mobile
+        WHERE 1=1
+    """
     
-    # Format response
-    sessions = []
-    for session, user_name, user_mobile, user_cnic, user_passport in results:
-        sessions.append({
-            "id": session.id,
-            "user_id": session.user_id,
-            "user_name": user_name,
-            "user_mobile": user_mobile,
-            "user_cnic": user_cnic,
-            "user_passport": user_passport,
-            "mac_address": session.mac_address,
-            "ip_address": session.ip_address,
-            "ap_name": session.ap_name,
-            "ssid": session.ssid,
-            "start_time": session.start_time,
-            "end_time": session.end_time,
-            "duration": session.duration,
-            "total_data": session.total_data,
-            "data_upload": session.data_upload,
-            "data_download": session.data_download,
-            "disconnect_reason": session.disconnect_reason,
-            "session_status": session.session_status
+    # Build RADIUS filter conditions
+    radius_conditions = []
+    radius_params = {}
+    
+    if start_date:
+        radius_conditions.append("ra.acctstarttime >= :start_date")
+        radius_params['start_date'] = datetime.combine(datetime.fromisoformat(start_date).date(), datetime.min.time())
+    
+    if end_date:
+        radius_conditions.append("ra.acctstarttime <= :end_date")
+        radius_params['end_date'] = datetime.combine(datetime.fromisoformat(end_date).date(), datetime.max.time())
+    
+    if mobile:
+        radius_conditions.append("ra.username LIKE :mobile")
+        radius_params['mobile'] = f"%{mobile}%"
+    
+    if mac_address:
+        radius_conditions.append("ra.callingstationid LIKE :mac_address")
+        radius_params['mac_address'] = f"%{mac_address}%"
+    
+    if status:
+        if status == 'active':
+            radius_conditions.append("ra.acctstoptime IS NULL")
+        else:
+            radius_conditions.append("ra.acctstoptime IS NOT NULL")
+    
+    if min_duration:
+        radius_conditions.append("ra.acctsessiontime >= :min_duration")
+        radius_params['min_duration'] = min_duration
+    
+    if max_duration:
+        radius_conditions.append("ra.acctsessiontime <= :max_duration")
+        radius_params['max_duration'] = max_duration
+    
+    if radius_conditions:
+        radius_query += " AND " + " AND ".join(radius_conditions)
+    
+    radius_query += " ORDER BY ra.acctstarttime DESC"
+    
+    radius_sessions = db.execute(text(radius_query), radius_params).fetchall()
+    
+    # Merge and sort both data sources
+    all_sessions = []
+    
+    # Add WiFi sessions
+    for s in wifi_sessions:
+        all_sessions.append({
+            "id": f"wifi_{s.session_id}",
+            "source": "wifi",
+            "user_id": s.user_id,
+            "user_name": s.user_name,
+            "user_mobile": s.user_mobile,
+            "user_cnic": s.user_cnic,
+            "user_passport": s.user_passport,
+            "mac_address": s.mac_address,
+            "start_time": s.start_time,
+            "end_time": s.end_time,
+            "duration": s.duration,
+            "data_upload": s.data_upload,
+            "data_download": s.data_download,
+            "total_data": s.total_data,
+            "session_status": s.session_status,
+            "disconnect_reason": s.disconnect_reason
         })
     
+    # Add RADIUS sessions
+    for s in radius_sessions:
+        all_sessions.append({
+            "id": f"radius_{s.session_id}",
+            "source": "radius",
+            "user_id": s.user_id,
+            "user_name": s.user_name,
+            "user_mobile": s.user_mobile,
+            "user_cnic": s.user_cnic,
+            "user_passport": s.user_passport,
+            "mac_address": s.mac_address,
+            "start_time": s.start_time,
+            "end_time": s.end_time,
+            "duration": s.duration,
+            "data_upload": s.data_upload or 0,
+            "data_download": s.data_download or 0,
+            "total_data": s.total_data or 0,
+            "session_status": s.session_status,
+            "disconnect_reason": s.disconnect_reason
+        })
+    
+    # Sort by start_time descending
+    all_sessions.sort(key=lambda x: x['start_time'] if x['start_time'] else datetime.min, reverse=True)
+    
+    # Apply pagination
+    total_count = len(all_sessions)
+    start_idx = (page - 1) * page_size
+    end_idx = start_idx + page_size
+    paginated_sessions = all_sessions[start_idx:end_idx]
+    
     return {
-        "sessions": sessions,
+        "sessions": paginated_sessions,
         "total_count": total_count,
         "page": page,
         "page_size": page_size,

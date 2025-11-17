@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../services/api';
 import { Table, Button, Tag, Space, message, Modal, Card, Statistic, Row, Col } from 'antd';
 import { ReloadOutlined, DisconnectOutlined, UserDeleteOutlined, ClockCircleOutlined } from '@ant-design/icons';
 
@@ -30,10 +30,7 @@ const RadiusSessions = () => {
   const loadActiveSessions = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:8000/api/radius/sessions/active', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await api.get('/radius/sessions/active');
       
       if (response.data.success) {
         setSessions(response.data.sessions);
@@ -50,10 +47,7 @@ const RadiusSessions = () => {
 
   const loadStatistics = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:8000/api/radius/statistics', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await api.get('/radius/statistics');
       
       if (response.data.success) {
         setStatistics(response.data.statistics);
@@ -72,12 +66,7 @@ const RadiusSessions = () => {
       cancelText: 'Cancel',
       onOk: async () => {
         try {
-          const token = localStorage.getItem('token');
-          const response = await axios.post(
-            `http://localhost:8000/api/radius/sessions/disconnect/${username}`,
-            {},
-            { headers: { Authorization: `Bearer ${token}` } }
-          );
+          const response = await api.post(`/radius/sessions/disconnect/${username}`);
           
           if (response.data.success) {
             message.success('User disconnected successfully');

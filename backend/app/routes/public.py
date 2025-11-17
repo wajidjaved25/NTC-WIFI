@@ -19,9 +19,9 @@ from ..models.advertisement import Advertisement
 from ..models.ad_analytics import AdAnalytics
 from ..services.ad_service import AdDisplayService
 from ..services.omada_service import OmadaService
+from ..services.radius_service import RadiusService
 from ..models.omada_config import OmadaConfig
 from ..utils.helpers import send_otp_sms, generate_otp
-from ..utils.radius import create_radius_user
 
 router = APIRouter(prefix="/public", tags=["Public API"])
 
@@ -248,14 +248,21 @@ async def register_user(data: UserRegister, db: Session = Depends(get_db)):
     
     # Create RADIUS user for WiFi authentication
     radius_password = data.cnic if data.id_type == 'cnic' else data.passport
-    radius_created = create_radius_user(
-        username=mobile,
-        password=radius_password,
-        session_timeout=3600  # 1 hour session by default
-    )
+    radius_service = RadiusService(db)
     
-    if not radius_created:
-        print(f"Warning: Failed to create RADIUS user for {mobile}")
+    try:
+        radius_created = radius_service.create_radius_user(
+            username=mobile,
+            password=radius_password,
+            session_timeout=3600  # 1 hour session by default
+        )
+        
+        if radius_created:
+            print(f"✓ Created RADIUS user: {mobile}")
+        else:
+            print(f"✗ Failed to create RADIUS user for {mobile}")
+    except Exception as e:
+        print(f"✗ RADIUS error for {mobile}: {e}")
     
     return {
         "success": True,
@@ -269,15 +276,20 @@ async def register_user(data: UserRegister, db: Session = Depends(get_db)):
 
 @router.post("/authorize")
 async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
-    """Authorize WiFi access"""
+    """
+    Authorize WiFi access
     
-    print(f"\n=== AUTHORIZE REQUEST ===")
-    print(f"Received data: {data}")
-    print(f"user_id: {data.user_id}")
-    print(f"mobile: {data.mobile}")
-    print(f"mac_address: {data.mac_address}")
-    print(f"ap_mac: {data.ap_mac}")
-    print(f"ssid: {data.ssid}")
+    NOTE: With RADIUS authentication, this endpoint is mainly for tracking.
+    Actual WiFi authentication happens through:
+    1. User connects to WiFi SSID
+    2. Omada captive portal shows
+    3. User enters mobile + CNIC/passport
+    4. Omada sends RADIUS request to FreeRADIUS
+    5. FreeRADIUS validates against radcheck table
+    6. User gets internet access
+    
+    This endpoint creates a session record for tracking purposes.
+    """
     
     # Get user
     user = None
@@ -295,14 +307,14 @@ async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
     
     # Validate MAC address
     if not data.mac_address:
-        raise HTTPException(status_code=400, detail="MAC address is required")
+        data.mac_address = "unknown"
     
-    # Get active Omada configuration
+    # Get active Omada configuration for redirect URL
     omada_config = db.query(OmadaConfig).filter(OmadaConfig.is_active == True).first()
-    if not omada_config:
-        raise HTTPException(status_code=500, detail="No active Omada configuration found")
+    redirect_url = omada_config.redirect_url if omada_config else "http://www.google.com"
+    session_timeout = omada_config.session_timeout if omada_config else 3600
     
-    # Create session record
+    # Create session record for tracking
     session = WiFiSession(
         user_id=user.id,
         mac_address=data.mac_address,
@@ -320,59 +332,15 @@ async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(session)
     
-    # Call Omada API to authorize client
-    try:
-        omada = OmadaService(
-            controller_url=omada_config.controller_url,
-            username=omada_config.username,
-            encrypted_password=omada_config.password_encrypted,
-            controller_id=omada_config.controller_id,
-            site_id=omada_config.site_id
-        )
-        
-        # Authorize the client on Omada controller
-        result = omada.authorize_client(
-            mac_address=data.mac_address,
-            duration=omada_config.session_timeout,
-            upload_limit=omada_config.bandwidth_limit_up,
-            download_limit=omada_config.bandwidth_limit_down,
-            ap_mac=data.ap_mac,
-            ssid=data.ssid
-        )
-        
-        if not result.get('success'):
-            # Rollback session if Omada authorization failed
-            session.session_status = 'failed'
-            session.end_time = datetime.now(timezone.utc)
-            db.commit()
-            
-            raise HTTPException(
-                status_code=500, 
-                detail=f"Failed to authorize on WiFi controller: {result.get('message', 'Unknown error')}"
-            )
-        
-        # Update session with Omada response data
-        session.session_status = 'active'
-        db.commit()
-        
-        return {
-            "success": True,
-            "message": "WiFi access authorized successfully",
-            "session_id": session.id,
-            "duration": omada_config.session_timeout,
-            "redirect_url": omada_config.redirect_url
-        }
-        
-    except Exception as e:
-        # Rollback session if any error
-        session.session_status = 'failed'
-        session.end_time = datetime.now(timezone.utc)
-        db.commit()
-        
-        raise HTTPException(
-            status_code=500,
-            detail=f"Authorization error: {str(e)}"
-        )
+    return {
+        "success": True,
+        "message": "Please enter your credentials on the WiFi login page",
+        "session_id": session.id,
+        "duration": session_timeout,
+        "redirect_url": redirect_url,
+        "auth_method": "radius",
+        "instructions": "Authentication is handled by RADIUS. User credentials: Username=mobile, Password=CNIC/Passport"
+    }
 
 
 # ========== ADVERTISEMENTS ==========
