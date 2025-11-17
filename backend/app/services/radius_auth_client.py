@@ -19,7 +19,7 @@ class RadiusAuthClient:
         self,
         username: str,
         password: str,
-        nas_ip: str = "192.168.3.254:8043"  # Omada controller IP
+        nas_ip: str = "192.168.3.254"  # Omada controller IP
     ) -> Dict:
         """
         Authenticate user via RADIUS using radclient

@@ -300,7 +300,7 @@ async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
         radius_result = radius_client.authenticate(
             username=user.mobile,
             password=user_password,
-            nas_ip="192.168.3.254:8043"
+            nas_ip="192.168.3.254"
         )
         
         if not radius_result.get('success'):
