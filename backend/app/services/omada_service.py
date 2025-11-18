@@ -141,6 +141,18 @@ class OmadaService:
         try:
             import time
             
+            # Normalize MAC addresses to lowercase with colons
+            def normalize_mac(mac):
+                if not mac:
+                    return mac
+                # Remove any separators and convert to lowercase
+                mac_clean = mac.replace('-', '').replace(':', '').replace('.', '').lower()
+                # Format with colons
+                return ':'.join(mac_clean[i:i+2] for i in range(0, 12, 2))
+            
+            mac_address = normalize_mac(mac_address)
+            ap_mac = normalize_mac(ap_mac) if ap_mac else None
+            
             print("\n" + "="*60)
             print("=== OMADA AUTHORIZE CLIENT (EXTERNAL PORTAL) ===")
             print(f"MAC Address: {mac_address}")
