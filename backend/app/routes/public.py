@@ -350,8 +350,9 @@ async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
         ap_mac_normalized = normalize_mac(data.ap_mac) if data.ap_mac else ''
         
         # Build the browserauth URL and form data
-        # Port 8843 is the default HTTPS portal port
-        browserauth_url = f"https://{controller_ip}:8843/portal/radius/browserauth"
+        # Port 8088 is HTTP portal, 8843 is HTTPS portal
+        # Using HTTP to avoid SSL certificate issues with self-signed certs
+        browserauth_url = f"http://{controller_ip}:8088/portal/radius/browserauth"
         
         # Prepare form data for browserauth
         auth_form_data = {
