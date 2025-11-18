@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { authorizeWiFi } from '../services/api';
 
 function SuccessPage({ portalDesign, userData, omadaParams }) {
@@ -6,6 +6,7 @@ function SuccessPage({ portalDesign, userData, omadaParams }) {
   const [authorized, setAuthorized] = useState(false);
   const [error, setError] = useState('');
   const [authData, setAuthData] = useState(null);
+  const formRef = useRef(null);
 
   useEffect(() => {
     handleAuthorization();
@@ -44,22 +45,26 @@ function SuccessPage({ portalDesign, userData, omadaParams }) {
       setAuthData(result);
       setError('');
 
-      // For RADIUS Server + External Portal:
-      // Redirect client back to Omada's RADIUS authentication
-      // Omada will then authenticate with RADIUS server using the credentials
-      
+      // Handle different auth methods
       setTimeout(() => {
-        // Build Omada RADIUS login URL
-        // The client needs to authenticate through Omada with RADIUS credentials
-        const baseUrl = omadaParams?.redirect_url || result.redirect_url;
-        
-        // If we have the original Omada auth URL, redirect there
-        // The client will need to enter credentials on Omada's form
-        // OR we can try auto-login via URL parameters
-        
-        console.log('🔗 Redirecting to:', baseUrl);
-        window.location.href = baseUrl || 'http://www.google.com';
-      }, 3000);
+        if (result.auth_method === 'radius_browserauth' && result.browserauth_url && result.form_data) {
+          // For RADIUS Server + External Web Portal:
+          // Submit form POST to Omada's browserauth endpoint
+          // This is the proper method per TP-Link documentation
+          console.log('🔗 RADIUS Browserauth - Submitting form to:', result.browserauth_url);
+          console.log('📋 Form data:', result.form_data);
+          
+          // Submit the hidden form
+          if (formRef.current) {
+            formRef.current.submit();
+          }
+        } else {
+          // Fallback redirect
+          const redirectUrl = result.redirect_url || omadaParams?.redirect_url || 'http://www.google.com';
+          console.log('🔗 Redirect to:', redirectUrl);
+          window.location.href = redirectUrl;
+        }
+      }, 2000);
       
     } catch (err) {
       console.error('Authorization failed:', err);
@@ -118,34 +123,21 @@ function SuccessPage({ portalDesign, userData, omadaParams }) {
                 />
               </svg>
               <h3 style={{ marginBottom: '10px' }}>Welcome, {userData?.name}!</h3>
-              <p style={{ color: '#666', marginBottom: '20px' }}>Your WiFi credentials are ready</p>
-              
-              {/* Show RADIUS credentials for Omada login */}
-              <div style={{ 
-                background: '#f0f9ff', 
-                border: '1px solid #91d5ff',
-                borderRadius: '8px',
-                padding: '15px', 
-                margin: '15px 0',
-                textAlign: 'left'
-              }}>
-                <p style={{ fontWeight: 'bold', marginBottom: '10px', color: '#1890ff' }}>
-                  🔐 Your WiFi Login Credentials:
-                </p>
-                <p style={{ margin: '5px 0' }}>
-                  <strong>Username:</strong> {userData?.mobile}
-                </p>
-                <p style={{ margin: '5px 0' }}>
-                  <strong>Password:</strong> Your CNIC/Passport number
-                </p>
-              </div>
+              <p style={{ color: '#666', marginBottom: '20px' }}>Your WiFi access is being activated</p>
               
               <p style={{ color: '#666', fontSize: '13px', marginTop: '15px' }}>
+                <span className="spinner" style={{ 
+                  display: 'inline-block', 
+                  width: '16px', 
+                  height: '16px', 
+                  marginRight: '8px',
+                  verticalAlign: 'middle'
+                }}></span>
                 Connecting you to WiFi...
               </p>
             </div>
             <div style={{ textAlign: 'center', fontSize: '13px', color: '#999' }}>
-              <p>Session Duration: 1 hour</p>
+              <p>Session Duration: {authData?.duration ? Math.floor(authData.duration / 60) : 60} minutes</p>
             </div>
           </>
         )}
@@ -157,7 +149,7 @@ function SuccessPage({ portalDesign, userData, omadaParams }) {
             </div>
             <div style={{ 
               background: '#fff7e6', 
-              border: '1px solid="#ffd591',
+              border: '1px solid #ffd591',
               borderRadius: '8px',
               padding: '15px', 
               margin: '20px 0',
@@ -182,6 +174,25 @@ function SuccessPage({ portalDesign, userData, omadaParams }) {
           </>
         )}
       </div>
+
+      {/* Hidden form for browserauth submission to Omada Controller */}
+      {authData?.auth_method === 'radius_browserauth' && authData?.browserauth_url && (
+        <form
+          ref={formRef}
+          method="POST"
+          action={authData.browserauth_url}
+          style={{ display: 'none' }}
+        >
+          <input type="hidden" name="clientMac" value={authData.form_data?.clientMac || ''} />
+          <input type="hidden" name="apMac" value={authData.form_data?.apMac || ''} />
+          <input type="hidden" name="ssidName" value={authData.form_data?.ssidName || ''} />
+          <input type="hidden" name="radioId" value={authData.form_data?.radioId || 0} />
+          <input type="hidden" name="authType" value={authData.form_data?.authType || 2} />
+          <input type="hidden" name="originUrl" value={authData.form_data?.originUrl || ''} />
+          <input type="hidden" name="username" value={authData.form_data?.username || ''} />
+          <input type="hidden" name="password" value={authData.form_data?.password || ''} />
+        </form>
+      )}
     </>
   );
 }

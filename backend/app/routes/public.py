@@ -320,50 +320,78 @@ async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
         
         print(f"✓ RADIUS authentication successful")
         
-        # For RADIUS Server type in Omada:
-        # We need to redirect client back to Omada's RADIUS login endpoint
-        # Omada will then send Access-Request to our RADIUS server
+        # For RADIUS Server + External Portal configuration:
+        # We need to call Omada's External Portal API to authorize the client
+        # This tells Omada to grant access, and Omada will record it in its session
         
-        session.session_status = 'active'
+        print("[Step 2: Submit to Omada RADIUS Auth Endpoint]")
+        
+        # For RADIUS Server + External Web Portal:
+        # We need to POST credentials to Omada's /portal/radius/browserauth endpoint
+        # Omada will then verify with RADIUS server and authorize the client
+        
+        # Build the Omada RADIUS auth URL
+        # Default portal port is 8843 for HTTPS
+        import re
+        controller_match = re.search(r'https?://([^:/]+)', omada_config.controller_url)
+        controller_ip = controller_match.group(1) if controller_match else '192.168.0.1'
+        
+        # For browserauth, we need to redirect the client with a form POST
+        # The frontend will handle this redirect
+        
+        # Normalize MAC addresses (Omada expects uppercase with hyphens)
+        def normalize_mac(mac):
+            if not mac:
+                return mac
+            mac_clean = mac.replace(':', '').replace('-', '').replace('.', '').upper()
+            return '-'.join(mac_clean[i:i+2] for i in range(0, 12, 2))
+        
+        client_mac = normalize_mac(data.mac_address)
+        ap_mac_normalized = normalize_mac(data.ap_mac) if data.ap_mac else ''
+        
+        # Build the browserauth URL and form data
+        # Port 8843 is the default HTTPS portal port
+        browserauth_url = f"https://{controller_ip}:8843/portal/radius/browserauth"
+        
+        # Prepare form data for browserauth
+        auth_form_data = {
+            "clientMac": client_mac,
+            "apMac": ap_mac_normalized,
+            "ssidName": data.ssid or '',
+            "radioId": 0,  # 0 for 2.4GHz, 1 for 5GHz
+            "authType": 2,  # 2 for External RADIUS
+            "originUrl": omada_config.redirect_url or "http://www.google.com",
+            "username": user.mobile,
+            "password": user_password
+        }
+        
+        print(f"Browserauth URL: {browserauth_url}")
+        print(f"Form data: {auth_form_data}")
+        
+        # Update session status
+        session.session_status = 'pending_browserauth'
         user.total_sessions += 1
         user.last_login = datetime.now(timezone.utc)
         db.commit()
         
         print(f"\n{'='*60}")
-        print(f"✓✓✓ RADIUS AUTHENTICATION COMPLETE ✓✓✓")
+        print(f"✓✓✓ RADIUS AUTHENTICATION READY ✓✓✓")
         print(f"User: {user.mobile}")
-        print(f"MAC: {data.mac_address}")
+        print(f"MAC: {client_mac}")
         print(f"Duration: {radius_result.get('session_timeout', 3600)}s")
+        print(f"Redirect to: {browserauth_url}")
         print(f"{'='*60}\n")
-        
-        # Build Omada RADIUS login URL
-        # Format: http://controller:8088/portal/radius/login
-        omada_login_url = f"{omada_config.controller_url.replace(':8043', ':8088')}/portal/radius/login"
-        
-        # URL encode credentials for redirect
-        import urllib.parse
-        auth_params = urllib.parse.urlencode({
-            'username': user.mobile,
-            'password': user_password,
-            'clientMac': data.mac_address or '',
-            'apMac': data.ap_mac or '',
-            'ssidName': data.ssid or ''
-        })
-        
-        omada_auth_url = f"{omada_login_url}?{auth_params}"
-        
-        print(f"🔗 Omada RADIUS Login URL: {omada_auth_url}")
         
         return {
             "success": True,
-            "message": "RADIUS credentials ready. Redirecting to WiFi login.",
+            "message": "RADIUS ready. Submitting to Omada...",
             "session_id": session.id,
             "duration": radius_result.get('session_timeout', 3600),
-            "redirect_url": omada_auth_url,
-            "auth_method": "radius_server",
+            "auth_method": "radius_browserauth",
             "radius_authenticated": True,
-            "username": user.mobile,
-            "omada_login_url": omada_auth_url
+            "browserauth_url": browserauth_url,
+            "form_data": auth_form_data,
+            "redirect_url": omada_config.redirect_url or "http://www.google.com"
         }
     
     except HTTPException:
