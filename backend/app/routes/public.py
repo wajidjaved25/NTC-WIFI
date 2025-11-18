@@ -291,9 +291,63 @@ async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
     db.refresh(session)
     
     try:
-        # User credentials are already in RADIUS database
-        # Omada controller will authenticate directly with RADIUS server
-        # We just log the session and redirect
+        # RADIUS + Omada Integration:
+        # 1. RADIUS user already created during registration
+        # 2. Now authenticate via RADIUS to validate credentials
+        # 3. If successful, authorize via Omada External Portal API
+        
+        print("[Step 1: RADIUS Authentication]")
+        radius_client = RadiusAuthClient(
+            radius_server="127.0.0.1",
+            radius_secret="testing123"
+        )
+        
+        radius_result = radius_client.authenticate(
+            username=user.mobile,
+            password=user_password,
+            nas_ip="192.168.3.254"
+        )
+        
+        if not radius_result.get('success'):
+            session.session_status = 'failed'
+            session.end_time = datetime.now(timezone.utc)
+            db.commit()
+            raise HTTPException(
+                status_code=401,
+                detail=f"RADIUS authentication failed: {radius_result.get('message')}"
+            )
+        
+        print(f"✓ RADIUS authentication successful")
+        
+        # Step 2: Authorize via Omada External Portal API
+        print("[Step 2: Omada Portal Authorization]")
+        
+        omada_service = OmadaService(
+            controller_url=omada_config.controller_url,
+            username=omada_config.username,
+            encrypted_password=omada_config.password,
+            controller_id=omada_config.controller_id,
+            site_id=omada_config.site_name or "Default"
+        )
+        
+        # Authorize client via Omada API
+        auth_result = omada_service.authorize_client(
+            mac_address=data.mac_address or "AA:BB:CC:DD:EE:FF",
+            duration=radius_result.get('session_timeout', 3600),
+            ap_mac=data.ap_mac,
+            ssid=data.ssid
+        )
+        
+        if not auth_result.get('success'):
+            session.session_status = 'failed'
+            session.end_time = datetime.now(timezone.utc)
+            db.commit()
+            raise HTTPException(
+                status_code=500,
+                detail=f"Omada authorization failed: {auth_result.get('message')}"
+            )
+        
+        print(f"✓ Omada authorization successful")
         
         session.session_status = 'active'
         user.total_sessions += 1
@@ -301,20 +355,22 @@ async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
         db.commit()
         
         print(f"\n{'='*60}")
-        print(f"✓✓✓ AUTHORIZED ✓✓✓")
+        print(f"✓✓✓ FULL AUTHORIZATION COMPLETE ✓✓✓")
         print(f"User: {user.mobile}")
-        print(f"RADIUS auth will be handled by Omada Controller")
+        print(f"MAC: {data.mac_address}")
+        print(f"Duration: {radius_result.get('session_timeout', 3600)}s")
+        print(f"Method: RADIUS + Omada Portal")
         print(f"{'='*60}\n")
         
         return {
             "success": True,
-            "message": "Registration complete - connecting to WiFi",
+            "message": "WiFi access granted via RADIUS + Omada",
             "session_id": session.id,
-            "duration": 3600,
+            "duration": radius_result.get('session_timeout', 3600),
             "redirect_url": omada_config.redirect_url or "http://www.google.com",
-            "auth_method": "radius",
-            "username": user.mobile,
-            "note": "Omada will authenticate via RADIUS"
+            "auth_method": "radius_omada_hybrid",
+            "radius_authenticated": True,
+            "omada_authorized": True
         }
     
     except HTTPException:

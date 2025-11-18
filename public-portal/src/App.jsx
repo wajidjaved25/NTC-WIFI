@@ -10,10 +10,25 @@ function App() {
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  
+  // CRITICAL: Capture and preserve Omada URL parameters
+  const [omadaParams, setOmadaParams] = useState(null);
 
   // Load portal design from admin settings
   useEffect(() => {
     loadPortalDesign();
+    
+    // Capture URL parameters from Omada captive portal
+    const urlParams = new URLSearchParams(window.location.search);
+    const params = {
+      mac: urlParams.get('mac') || urlParams.get('client_mac') || urlParams.get('clientMac'),
+      ap_mac: urlParams.get('ap_mac') || urlParams.get('apMac'),
+      ssid: urlParams.get('ssid') || urlParams.get('ssidName'),
+      redirect_url: urlParams.get('url') || urlParams.get('redirect_url')
+    };
+    
+    console.log('🔍 Captured Omada Parameters:', params);
+    setOmadaParams(params);
   }, []);
 
   const loadPortalDesign = async () => {
@@ -121,6 +136,7 @@ function App() {
           <SuccessPage
             portalDesign={portalDesign}
             userData={userData}
+            omadaParams={omadaParams}
           />
         )}
 

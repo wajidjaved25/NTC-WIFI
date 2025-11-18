@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { authorizeWiFi } from '../services/api';
 
-function SuccessPage({ portalDesign, userData }) {
+function SuccessPage({ portalDesign, userData, omadaParams }) {
   const [authorizing, setAuthorizing] = useState(true);
   const [authorized, setAuthorized] = useState(false);
   const [error, setError] = useState('');
@@ -14,23 +14,32 @@ function SuccessPage({ portalDesign, userData }) {
     try {
       setAuthorizing(true);
       
-      // Get parameters from URL (passed by Omada captive portal)
-      const urlParams = new URLSearchParams(window.location.search);
-      const macAddress = urlParams.get('mac') || urlParams.get('client_mac') || urlParams.get('clientMac');
-      const apMac = urlParams.get('ap_mac') || urlParams.get('apMac');
-      const ssid = urlParams.get('ssid') || urlParams.get('ssidName');
+      console.log('🔐 === WIFI AUTHORIZATION DEBUG ===');
+      console.log('User Data:', userData);
+      console.log('Omada Params (preserved):', omadaParams);
+      console.log('MAC Address:', omadaParams?.mac);
+      console.log('AP MAC:', omadaParams?.ap_mac);
+      console.log('SSID:', omadaParams?.ssid);
+      console.log('===================================');
 
-      console.log('Authorization params:', { macAddress, apMac, ssid, userData });
-
+      // Use preserved parameters from App.jsx (not URL which may be lost)
+      const macAddress = omadaParams?.mac;
+      const apMac = omadaParams?.ap_mac;
+      const ssid = omadaParams?.ssid;
+      
+      // Development mode: Use test MAC if none provided
+      const finalMacAddress = macAddress || 'AA:BB:CC:DD:EE:FF';
+      
       if (!macAddress) {
-        throw new Error('MAC address not found in URL parameters. Please connect through WiFi captive portal.');
+        console.warn('⚠️ No MAC address from Omada - using test MAC for development');
+        console.warn('⚠️ In production, user must come through Omada captive portal');
       }
 
       // Authorize WiFi access through Omada External Portal API
       const result = await authorizeWiFi({
         user_id: userData?.id,
         mobile: userData?.mobile,
-        mac_address: macAddress,
+        mac_address: finalMacAddress,
         ap_mac: apMac,
         ssid: ssid,
       });
@@ -40,7 +49,7 @@ function SuccessPage({ portalDesign, userData }) {
 
       // Redirect after 3 seconds
       setTimeout(() => {
-        const redirectUrl = result.redirect_url || urlParams.get('url') || 'http://www.google.com';
+        const redirectUrl = result.redirect_url || omadaParams?.redirect_url || 'http://www.google.com';
         window.location.href = redirectUrl;
       }, 3000);
     } catch (err) {

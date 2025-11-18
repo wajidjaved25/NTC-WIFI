@@ -170,23 +170,33 @@ class OmadaService:
             expire_time = int((time.time() + duration) * 1000000)
             
             # Build payload based on connection type
-            if ap_mac:
-                # Wireless (EAP) connection
+            if ap_mac and ssid:
+                # Wireless (EAP) connection - PREFERRED
                 payload = {
                     "clientMac": mac_address,
                     "apMac": ap_mac,
-                    "ssidName": ssid or "",
+                    "ssidName": ssid,
                     "radioId": radio_id or "",
                     "site": self.site_id,
                     "time": expire_time,
                     "authType": 4  # External portal
                 }
-            else:
+            elif gateway_mac:
                 # Wired (Gateway) connection
                 payload = {
                     "clientMac": mac_address,
-                    "gatewayMac": gateway_mac or "",
+                    "gatewayMac": gateway_mac,
                     "vid": vid or "",
+                    "site": self.site_id,
+                    "time": expire_time,
+                    "authType": 4  # External portal
+                }
+            else:
+                # Fallback: Minimal payload (may fail without proper captive portal context)
+                print("⚠️ WARNING: No AP MAC or Gateway MAC provided. Authorization may fail.")
+                print("⚠️ This usually means user didn't come through Omada captive portal.\n")
+                payload = {
+                    "clientMac": mac_address,
                     "site": self.site_id,
                     "time": expire_time,
                     "authType": 4  # External portal
