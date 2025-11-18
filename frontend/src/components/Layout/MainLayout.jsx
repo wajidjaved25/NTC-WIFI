@@ -70,6 +70,15 @@ function MainLayout({ children, user, onLogout }) {
       })
     }
 
+    // RADIUS Settings - superadmin & admin only
+    if (['superadmin', 'admin'].includes(user.role)) {
+      items.push({
+        key: '/radius-settings',
+        icon: <SettingOutlined />,
+        label: 'RADIUS Settings',
+      })
+    }
+
     // Admin Management - superadmin only
     if (user.role === 'superadmin') {
       items.push({
@@ -113,6 +122,7 @@ function MainLayout({ children, user, onLogout }) {
               {location.pathname === '/advertisements' && 'Advertisement Management'}
               {location.pathname === '/portal-design' && 'Portal Design'}
               {location.pathname === '/radius-sessions' && 'Active RADIUS Sessions'}
+              {location.pathname === '/radius-settings' && 'RADIUS Server Settings'}
               {location.pathname === '/admin-management' && 'Admin Management'}
             </div>
             <div className="header-user">

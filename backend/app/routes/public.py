@@ -219,19 +219,36 @@ async def register_user(data: UserRegister, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
     
-    # Create RADIUS user
+    # Create RADIUS user with settings from database
     radius_password = data.cnic if data.id_type == 'cnic' else data.passport
     radius_service = RadiusService(db)
     
     try:
+        # Get RADIUS settings
+        from ..models.radius_settings import RadiusSettings
+        radius_settings = db.query(RadiusSettings).first()
+        
+        session_timeout = 3600  # Default 1 hour
+        bandwidth_down = None
+        bandwidth_up = None
+        
+        if radius_settings:
+            session_timeout = radius_settings.default_session_timeout
+            if radius_settings.default_bandwidth_down > 0:
+                bandwidth_down = radius_settings.default_bandwidth_down * 1000  # Convert to bps
+            if radius_settings.default_bandwidth_up > 0:
+                bandwidth_up = radius_settings.default_bandwidth_up * 1000
+        
         radius_created = radius_service.create_radius_user(
             username=mobile,
             password=radius_password,
-            session_timeout=3600
+            session_timeout=session_timeout,
+            bandwidth_down=bandwidth_down,
+            bandwidth_up=bandwidth_up
         )
         
         if radius_created:
-            print(f"✓ RADIUS user created: {mobile}")
+            print(f"✓ RADIUS user created: {mobile} (timeout: {session_timeout}s)")
         else:
             print(f"✗ RADIUS user creation failed: {mobile}")
     except Exception as e:

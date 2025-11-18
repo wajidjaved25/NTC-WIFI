@@ -10,6 +10,7 @@ import Advertisements from './pages/Advertisements'
 import PortalDesign from './pages/PortalDesign'
 import AdminManagement from './pages/AdminManagement'
 import RadiusSessions from './pages/RadiusSessions'
+import RadiusSettings from './pages/RadiusSettings'
 import { authAPI } from './services/api'
 import './App.css'
 
@@ -171,6 +172,19 @@ function App() {
           user && ['superadmin', 'admin'].includes(user.role) ? (
             <MainLayout user={user} onLogout={handleLogout}>
               <RadiusSessions />
+            </MainLayout>
+          ) : (
+            <Navigate to="/dashboard" />
+          )
+        } 
+      />
+
+      <Route 
+        path="/radius-settings" 
+        element={
+          user && ['superadmin', 'admin'].includes(user.role) ? (
+            <MainLayout user={user} onLogout={handleLogout}>
+              <RadiusSettings />
             </MainLayout>
           ) : (
             <Navigate to="/dashboard" />

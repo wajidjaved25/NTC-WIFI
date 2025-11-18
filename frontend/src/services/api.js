@@ -157,4 +157,26 @@ export const portalAPI = {
     api.put('/portal/settings', { key, value }),
 };
 
+// RADIUS Management APIs
+export const radiusAPI = {
+  getActiveSessions: () => 
+    api.get('/radius/sessions/active'),
+  getUserSessions: (username, limit = 10) => 
+    api.get(`/radius/sessions/user/${username}`, { params: { limit } }),
+  disconnectUser: (username) => 
+    api.post(`/radius/sessions/disconnect/${username}`),
+  getStatistics: () => 
+    api.get('/radius/statistics'),
+  updateUserTimeout: (username, timeout) => 
+    api.patch(`/radius/users/${username}/timeout`, null, { params: { timeout } }),
+  updateUserBandwidth: (username, bandwidth) => 
+    api.patch(`/radius/users/${username}/bandwidth`, null, { params: { bandwidth } }),
+  deleteUser: (username) => 
+    api.delete(`/radius/users/${username}`),
+  getSettings: () => 
+    api.get('/radius/settings'),
+  updateSettings: (settings) => 
+    api.put('/radius/settings', settings),
+};
+
 export default api;
