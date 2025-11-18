@@ -1,28 +1,49 @@
 """
 RADIUS Authentication Client
-Performs programmatic RADIUS authentication for auto-login
+Performs programmatic RADIUS authentication using pyrad library
+No external dependencies on radclient command-line tool
 """
 
-import subprocess
-import re
-from typing import Dict, Optional
+import socket
+from typing import Dict
+from pyrad.client import Client
+from pyrad.dictionary import Dictionary
+from pyrad import packet
 
 
 class RadiusAuthClient:
-    """Client for performing RADIUS authentication programmatically"""
+    """Client for performing RADIUS authentication programmatically using pyrad"""
     
-    def __init__(self, radius_server: str = "127.0.0.1", radius_secret: str = "testing123"):
+    def __init__(self, radius_server: str = "127.0.0.1", radius_secret: str = "testing123", radius_port: int = 1812):
         self.radius_server = radius_server
         self.radius_secret = radius_secret
+        self.radius_port = radius_port
+        
+        # Create RADIUS dictionary inline (minimal required attributes)
+        self.dict_content = """
+ATTRIBUTE   User-Name               1   string
+ATTRIBUTE   User-Password           2   string
+ATTRIBUTE   NAS-IP-Address          4   ipaddr
+ATTRIBUTE   NAS-Port                5   integer
+ATTRIBUTE   Service-Type            6   integer
+ATTRIBUTE   Framed-Protocol         7   integer
+ATTRIBUTE   Framed-IP-Address       8   ipaddr
+ATTRIBUTE   Session-Timeout         27  integer
+ATTRIBUTE   Calling-Station-Id      31  string
+ATTRIBUTE   NAS-Identifier          32  string
+ATTRIBUTE   Acct-Status-Type        40  integer
+ATTRIBUTE   Acct-Session-Id         44  string
+ATTRIBUTE   Reply-Message           18  string
+"""
     
     def authenticate(
         self,
         username: str,
         password: str,
-        nas_ip: str = "192.168.3.254"  # Omada controller IP
+        nas_ip: str = "192.168.3.254"
     ) -> Dict:
         """
-        Authenticate user via RADIUS using radclient
+        Authenticate user via RADIUS using pyrad library
         
         Args:
             username: User's mobile number
@@ -33,44 +54,42 @@ class RadiusAuthClient:
             Dict with success status and details
         """
         try:
-            # Build RADIUS Access-Request packet
-            radius_request = f"""User-Name = "{username}"
-User-Password = "{password}"
-NAS-IP-Address = {nas_ip}
-NAS-Port = 0
-Message-Authenticator = 0x00
-"""
-            
-            # Execute radclient command
-            cmd = [
-                'radclient',
-                '-x',  # Debug output
-                f'{self.radius_server}:1812',  # RADIUS server:port
-                'auth',  # Request type
-                self.radius_secret  # Shared secret
-            ]
-            
             print(f"\n=== RADIUS AUTHENTICATION ===")
             print(f"Username: {username}")
-            print(f"Server: {self.radius_server}")
+            print(f"Server: {self.radius_server}:{self.radius_port}")
             print(f"NAS IP: {nas_ip}")
             
-            # Run radclient
-            result = subprocess.run(
-                cmd,
-                input=radius_request,
-                capture_output=True,
-                text=True,
-                timeout=10
+            # Create dictionary from string
+            import io
+            dict_io = io.StringIO(self.dict_content)
+            
+            # Create RADIUS client
+            srv = Client(
+                server=self.radius_server,
+                secret=self.radius_secret.encode('utf-8'),
+                dict=Dictionary(dict_io)
             )
+            srv.timeout = 10
+            srv.retries = 3
             
-            print(f"RADIUS Response: {result.stdout}")
+            # Create authentication request
+            req = srv.CreateAuthPacket(code=packet.AccessRequest)
+            req["User-Name"] = username
+            req["User-Password"] = req.PwCrypt(password)
+            req["NAS-IP-Address"] = nas_ip
+            req["NAS-Port"] = 0
             
-            # Parse response
-            if "Access-Accept" in result.stdout:
+            print(f"Sending RADIUS request...")
+            
+            # Send request and get response
+            reply = srv.SendPacket(req)
+            
+            # Check response code
+            if reply.code == packet.AccessAccept:
                 # Extract session timeout if present
-                timeout_match = re.search(r'Session-Timeout = (\d+)', result.stdout)
-                session_timeout = int(timeout_match.group(1)) if timeout_match else 3600
+                session_timeout = 3600  # Default
+                if "Session-Timeout" in reply:
+                    session_timeout = reply["Session-Timeout"][0]
                 
                 print(f"✓ RADIUS Authentication SUCCESS")
                 print(f"Session Timeout: {session_timeout} seconds\n")
@@ -79,34 +98,56 @@ Message-Authenticator = 0x00
                     "success": True,
                     "message": "RADIUS authentication successful",
                     "session_timeout": session_timeout,
-                    "response": result.stdout
+                    "code": "Access-Accept"
                 }
             
-            elif "Access-Reject" in result.stdout:
-                print(f"✗ RADIUS Authentication REJECTED\n")
+            elif reply.code == packet.AccessReject:
+                # Get reject message if present
+                reject_msg = "Invalid credentials"
+                if "Reply-Message" in reply:
+                    reject_msg = reply["Reply-Message"][0]
+                
+                print(f"✗ RADIUS Authentication REJECTED: {reject_msg}\n")
                 return {
                     "success": False,
-                    "message": "RADIUS authentication rejected - invalid credentials",
-                    "response": result.stdout
+                    "message": f"RADIUS authentication rejected - {reject_msg}",
+                    "code": "Access-Reject"
+                }
+            
+            elif reply.code == packet.AccessChallenge:
+                print(f"✗ RADIUS Authentication requires CHALLENGE\n")
+                return {
+                    "success": False,
+                    "message": "RADIUS authentication requires challenge (not supported)",
+                    "code": "Access-Challenge"
                 }
             
             else:
-                print(f"✗ RADIUS Authentication FAILED\n")
+                print(f"✗ RADIUS Authentication UNKNOWN response: {reply.code}\n")
                 return {
                     "success": False,
-                    "message": "No response from RADIUS server",
-                    "response": result.stdout
+                    "message": f"Unknown RADIUS response code: {reply.code}",
+                    "code": "Unknown"
                 }
         
-        except subprocess.TimeoutExpired:
+        except socket.timeout:
             print(f"✗ RADIUS request timed out\n")
             return {
                 "success": False,
-                "message": "RADIUS authentication timeout"
+                "message": "RADIUS authentication timeout - server not responding"
+            }
+        
+        except socket.error as e:
+            print(f"✗ RADIUS socket error: {str(e)}\n")
+            return {
+                "success": False,
+                "message": f"RADIUS connection error: {str(e)}"
             }
         
         except Exception as e:
             print(f"✗ RADIUS authentication error: {str(e)}\n")
+            import traceback
+            traceback.print_exc()
             return {
                 "success": False,
                 "message": f"RADIUS authentication error: {str(e)}"
@@ -116,10 +157,11 @@ Message-Authenticator = 0x00
         """Test RADIUS server connectivity"""
         try:
             # Send a test authentication request
+            # Even if it fails auth, we'll know if server is reachable
             result = self.authenticate("test_user", "test_pass")
             
-            # Even if authentication fails, if we get a response, server is reachable
-            if result.get("response"):
+            # If we got any response (even reject), server is reachable
+            if result.get("code") in ["Access-Accept", "Access-Reject", "Access-Challenge"]:
                 return {
                     "success": True,
                     "message": "RADIUS server is reachable"
@@ -127,7 +169,7 @@ Message-Authenticator = 0x00
             
             return {
                 "success": False,
-                "message": "Cannot reach RADIUS server"
+                "message": result.get("message", "Cannot reach RADIUS server")
             }
         
         except Exception as e:

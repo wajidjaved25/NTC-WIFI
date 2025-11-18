@@ -47,3 +47,6 @@ python-json-logger==2.0.7
 
 # Image Processing
 Pillow==10.4.0
+
+# RADIUS Authentication
+pyrad==2.4
