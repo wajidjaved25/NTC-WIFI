@@ -5,6 +5,7 @@ function SuccessPage({ portalDesign, userData, omadaParams }) {
   const [authorizing, setAuthorizing] = useState(true);
   const [authorized, setAuthorized] = useState(false);
   const [error, setError] = useState('');
+  const [authData, setAuthData] = useState(null);
 
   useEffect(() => {
     handleAuthorization();
@@ -17,25 +18,20 @@ function SuccessPage({ portalDesign, userData, omadaParams }) {
       console.log('🔐 === WIFI AUTHORIZATION DEBUG ===');
       console.log('User Data:', userData);
       console.log('Omada Params (preserved):', omadaParams);
-      console.log('MAC Address:', omadaParams?.mac);
-      console.log('AP MAC:', omadaParams?.ap_mac);
-      console.log('SSID:', omadaParams?.ssid);
       console.log('===================================');
 
-      // Use preserved parameters from App.jsx (not URL which may be lost)
+      // Use preserved parameters from App.jsx
       const macAddress = omadaParams?.mac;
       const apMac = omadaParams?.ap_mac;
       const ssid = omadaParams?.ssid;
       
-      // Development mode: Use test MAC if none provided
       const finalMacAddress = macAddress || 'AA:BB:CC:DD:EE:FF';
       
       if (!macAddress) {
-        console.warn('⚠️ No MAC address from Omada - using test MAC for development');
-        console.warn('⚠️ In production, user must come through Omada captive portal');
+        console.warn('⚠️ No MAC address from Omada - using test MAC');
       }
 
-      // Authorize WiFi access through Omada External Portal API
+      // Call backend to create RADIUS user and validate
       const result = await authorizeWiFi({
         user_id: userData?.id,
         mobile: userData?.mobile,
@@ -45,13 +41,26 @@ function SuccessPage({ portalDesign, userData, omadaParams }) {
       });
 
       setAuthorized(true);
+      setAuthData(result);
       setError('');
 
-      // Redirect after 3 seconds
+      // For RADIUS Server + External Portal:
+      // Redirect client back to Omada's RADIUS authentication
+      // Omada will then authenticate with RADIUS server using the credentials
+      
       setTimeout(() => {
-        const redirectUrl = result.redirect_url || omadaParams?.redirect_url || 'http://www.google.com';
-        window.location.href = redirectUrl;
+        // Build Omada RADIUS login URL
+        // The client needs to authenticate through Omada with RADIUS credentials
+        const baseUrl = omadaParams?.redirect_url || result.redirect_url;
+        
+        // If we have the original Omada auth URL, redirect there
+        // The client will need to enter credentials on Omada's form
+        // OR we can try auto-login via URL parameters
+        
+        console.log('🔗 Redirecting to:', baseUrl);
+        window.location.href = baseUrl || 'http://www.google.com';
       }, 3000);
+      
     } catch (err) {
       console.error('Authorization failed:', err);
       setError(err.response?.data?.detail || err.message || 'Failed to authorize WiFi access');
@@ -88,7 +97,7 @@ function SuccessPage({ portalDesign, userData, omadaParams }) {
         {!authorizing && authorized && (
           <>
             <div className="message message-success">
-              ✓ You are now connected to WiFi!
+              ✓ Registration Complete!
             </div>
             <div style={{ textAlign: 'center', padding: '20px 0' }}>
               <svg
@@ -109,11 +118,34 @@ function SuccessPage({ portalDesign, userData, omadaParams }) {
                 />
               </svg>
               <h3 style={{ marginBottom: '10px' }}>Welcome, {userData?.name}!</h3>
-              <p style={{ color: '#666' }}>Redirecting you to the internet...</p>
+              <p style={{ color: '#666', marginBottom: '20px' }}>Your WiFi credentials are ready</p>
+              
+              {/* Show RADIUS credentials for Omada login */}
+              <div style={{ 
+                background: '#f0f9ff', 
+                border: '1px solid #91d5ff',
+                borderRadius: '8px',
+                padding: '15px', 
+                margin: '15px 0',
+                textAlign: 'left'
+              }}>
+                <p style={{ fontWeight: 'bold', marginBottom: '10px', color: '#1890ff' }}>
+                  🔐 Your WiFi Login Credentials:
+                </p>
+                <p style={{ margin: '5px 0' }}>
+                  <strong>Username:</strong> {userData?.mobile}
+                </p>
+                <p style={{ margin: '5px 0' }}>
+                  <strong>Password:</strong> Your CNIC/Passport number
+                </p>
+              </div>
+              
+              <p style={{ color: '#666', fontSize: '13px', marginTop: '15px' }}>
+                Connecting you to WiFi...
+              </p>
             </div>
             <div style={{ textAlign: 'center', fontSize: '13px', color: '#999' }}>
-              <p>Mobile: {userData?.mobile}</p>
-              <p>Session: 1 hour</p>
+              <p>Session Duration: 1 hour</p>
             </div>
           </>
         )}

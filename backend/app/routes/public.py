@@ -291,10 +291,11 @@ async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
     db.refresh(session)
     
     try:
-        # RADIUS + Omada Integration:
+        # RADIUS Server Authentication Flow:
         # 1. RADIUS user already created during registration
-        # 2. Now authenticate via RADIUS to validate credentials
-        # 3. If successful, authorize via Omada External Portal API
+        # 2. Authenticate via RADIUS to validate credentials
+        # 3. For RADIUS Server type portal, we just need to confirm auth succeeded
+        #    The client will be authorized by Omada when it receives RADIUS Access-Accept
         
         print("[Step 1: RADIUS Authentication]")
         radius_client = RadiusAuthClient(
@@ -319,35 +320,9 @@ async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
         
         print(f"✓ RADIUS authentication successful")
         
-        # Step 2: Authorize via Omada External Portal API
-        print("[Step 2: Omada Portal Authorization]")
-        
-        omada_service = OmadaService(
-            controller_url=omada_config.controller_url,
-            username=omada_config.username,
-            encrypted_password=omada_config.password_encrypted,
-            controller_id=omada_config.controller_id,
-            site_id=omada_config.site_name or "Default"
-        )
-        
-        # Authorize client via Omada API
-        auth_result = omada_service.authorize_client(
-            mac_address=data.mac_address or "AA:BB:CC:DD:EE:FF",
-            duration=radius_result.get('session_timeout', 3600),
-            ap_mac=data.ap_mac,
-            ssid=data.ssid
-        )
-        
-        if not auth_result.get('success'):
-            session.session_status = 'failed'
-            session.end_time = datetime.now(timezone.utc)
-            db.commit()
-            raise HTTPException(
-                status_code=500,
-                detail=f"Omada authorization failed: {auth_result.get('message')}"
-            )
-        
-        print(f"✓ Omada authorization successful")
+        # For RADIUS Server type in Omada:
+        # We need to redirect client back to Omada's RADIUS login endpoint
+        # Omada will then send Access-Request to our RADIUS server
         
         session.session_status = 'active'
         user.total_sessions += 1
@@ -355,22 +330,40 @@ async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
         db.commit()
         
         print(f"\n{'='*60}")
-        print(f"✓✓✓ FULL AUTHORIZATION COMPLETE ✓✓✓")
+        print(f"✓✓✓ RADIUS AUTHENTICATION COMPLETE ✓✓✓")
         print(f"User: {user.mobile}")
         print(f"MAC: {data.mac_address}")
         print(f"Duration: {radius_result.get('session_timeout', 3600)}s")
-        print(f"Method: RADIUS + Omada Portal")
         print(f"{'='*60}\n")
+        
+        # Build Omada RADIUS login URL
+        # Format: http://controller:8088/portal/radius/login
+        omada_login_url = f"{omada_config.controller_url.replace(':8043', ':8088')}/portal/radius/login"
+        
+        # URL encode credentials for redirect
+        import urllib.parse
+        auth_params = urllib.parse.urlencode({
+            'username': user.mobile,
+            'password': user_password,
+            'clientMac': data.mac_address or '',
+            'apMac': data.ap_mac or '',
+            'ssidName': data.ssid or ''
+        })
+        
+        omada_auth_url = f"{omada_login_url}?{auth_params}"
+        
+        print(f"🔗 Omada RADIUS Login URL: {omada_auth_url}")
         
         return {
             "success": True,
-            "message": "WiFi access granted via RADIUS + Omada",
+            "message": "RADIUS credentials ready. Redirecting to WiFi login.",
             "session_id": session.id,
             "duration": radius_result.get('session_timeout', 3600),
-            "redirect_url": omada_config.redirect_url or "http://www.google.com",
-            "auth_method": "radius_omada_hybrid",
+            "redirect_url": omada_auth_url,
+            "auth_method": "radius_server",
             "radius_authenticated": True,
-            "omada_authorized": True
+            "username": user.mobile,
+            "omada_login_url": omada_auth_url
         }
     
     except HTTPException:
