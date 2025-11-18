@@ -195,17 +195,19 @@ async def get_sessions(
                 "user_cnic": s.user_cnic,
                 "user_passport": s.user_passport,
                 "mac_address": s.mac_address,
-                "start_time": s.start_time,
-                "end_time": s.end_time,
+                "start_time": s.start_time.isoformat() if s.start_time else None,
+                "end_time": s.end_time.isoformat() if s.end_time else None,
                 "duration": s.duration,
-                "data_upload": s.data_upload,
-                "data_download": s.data_download,
-                "total_data": s.total_data,
+                "data_upload": s.data_upload or 0,
+                "data_download": s.data_download or 0,
+                "total_data": s.total_data or 0,
                 "session_status": s.session_status,
                 "disconnect_reason": s.disconnect_reason
             })
     except Exception as e:
         print(f"Error querying WiFi sessions: {e}")
+        import traceback
+        traceback.print_exc()
     
     # Try to get RADIUS sessions (may fail if radacct table doesn't exist)
     try:
@@ -286,8 +288,8 @@ async def get_sessions(
                 "user_cnic": s.user_cnic,
                 "user_passport": s.user_passport,
                 "mac_address": s.mac_address,
-                "start_time": s.start_time,
-                "end_time": s.end_time,
+                "start_time": s.start_time.isoformat() if s.start_time else None,
+                "end_time": s.end_time.isoformat() if s.end_time else None,
                 "duration": s.duration,
                 "data_upload": s.data_upload or 0,
                 "data_download": s.data_download or 0,
@@ -297,9 +299,17 @@ async def get_sessions(
             })
     except Exception as e:
         print(f"Error querying RADIUS sessions (radacct table may not exist): {e}")
+        import traceback
+        traceback.print_exc()
     
-    # Sort by start_time descending
-    all_sessions.sort(key=lambda x: x['start_time'] if x['start_time'] else datetime.min, reverse=True)
+    # Sort by start_time descending (handle None values)
+    def sort_key(x):
+        st = x.get('start_time')
+        if st is None:
+            return ''
+        return st
+    
+    all_sessions.sort(key=sort_key, reverse=True)
     
     # Apply pagination
     total_count = len(all_sessions)
@@ -312,7 +322,7 @@ async def get_sessions(
         "total_count": total_count,
         "page": page,
         "page_size": page_size,
-        "total_pages": (total_count + page_size - 1) // page_size
+        "total_pages": (total_count + page_size - 1) // page_size if total_count > 0 else 0
     }
 
 # Export records

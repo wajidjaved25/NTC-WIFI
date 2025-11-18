@@ -88,11 +88,13 @@ def has_permission(user: Admin, permission: str) -> bool:
         "superadmin": [
             "create_admin", "delete_admin", "view_all_admins",
             "edit_omada", "view_records", "export_records",
-            "manage_ads", "edit_portal_design", "view_analytics"
+            "manage_ads", "edit_portal_design", "view_analytics",
+            "manage_sessions", "manage_radius"
         ],
         "admin": [
             "edit_omada", "view_records", "export_records",
-            "manage_ads", "edit_portal_design", "view_analytics"
+            "manage_ads", "edit_portal_design", "view_analytics",
+            "manage_sessions", "manage_radius"
         ],
         "reports_user": [
             "view_records", "export_records", "view_analytics"
