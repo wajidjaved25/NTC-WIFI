@@ -325,7 +325,7 @@ async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
         omada_service = OmadaService(
             controller_url=omada_config.controller_url,
             username=omada_config.username,
-            encrypted_password=omada_config.password,
+            encrypted_password=omada_config.password_encrypted,
             controller_id=omada_config.controller_id,
             site_id=omada_config.site_name or "Default"
         )
