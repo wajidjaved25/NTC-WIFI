@@ -32,6 +32,9 @@ class RadiusSettings(Base):
     daily_data_limit = Column(Integer, default=0)
     monthly_data_limit = Column(Integer, default=0)
     
+    # Session Data Limit (in MB per session, 0 = unlimited)
+    session_data_limit = Column(Integer, default=0)
+    
     # Authentication Settings
     allow_multiple_devices = Column(Boolean, default=False)
     
