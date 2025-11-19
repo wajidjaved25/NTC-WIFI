@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { sendOTP, verifyOTP, registerUser } from '../services/api';
 import TermsModal from './TermsModal';
 
@@ -20,7 +20,7 @@ function LoginForm({ portalDesign, onSuccess }) {
   const otpRefs = useRef([]);
 
   // Timer countdown
-  useState(() => {
+  useEffect(() => {
     if (timer > 0) {
       const interval = setInterval(() => {
         setTimer((prev) => prev - 1);

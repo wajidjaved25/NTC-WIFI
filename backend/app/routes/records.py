@@ -234,9 +234,9 @@ async def get_sessions(
                 u.email as user_email,
                 u.id_type as user_id_type,
                 ra.callingstationid as mac_address,
-                ra.framedipaddress as ip_address,
+                COALESCE(ra.framedipaddress::text, s.ip_address, '') as ip_address,
                 ra.calledstationid as called_station,
-                ra.nasportid as ap_name,
+                COALESCE(ra.nasportid, s.ap_name, '') as ap_name,
                 ra.acctstarttime as start_time,
                 ra.acctstoptime as end_time,
                 ra.acctsessiontime as duration,
@@ -250,7 +250,10 @@ async def get_sessions(
                 ra.acctterminatecause as disconnect_reason
             FROM radacct ra
             LEFT JOIN users u ON ra.username = u.mobile
-            WHERE 1=1
+            LEFT JOIN sessions s ON ra.username = u.mobile 
+                AND s.mac_address = ra.callingstationid 
+                AND DATE(s.start_time) = DATE(ra.acctstarttime)
+            WHERE ra.acctterminatecause IS NULL OR ra.acctterminatecause NOT LIKE '%PENDING%'
         """
         
         # Build RADIUS filter conditions

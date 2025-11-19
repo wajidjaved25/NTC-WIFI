@@ -49,6 +49,7 @@ class WiFiAuth(BaseModel):
     mac_address: Optional[str] = None
     ap_mac: Optional[str] = None
     ssid: Optional[str] = None
+    client_ip: Optional[str] = None
 
 class AdTrack(BaseModel):
     ad_id: int
@@ -306,6 +307,7 @@ async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
     session = WiFiSession(
         user_id=user.id,
         mac_address=data.mac_address or "pending",
+        ip_address=data.client_ip,
         ap_mac=data.ap_mac,
         ssid=data.ssid,
         start_time=datetime.now(timezone.utc),

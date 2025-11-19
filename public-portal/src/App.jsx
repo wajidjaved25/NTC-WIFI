@@ -24,6 +24,7 @@ function App() {
       mac: urlParams.get('mac') || urlParams.get('client_mac') || urlParams.get('clientMac'),
       ap_mac: urlParams.get('ap_mac') || urlParams.get('apMac'),
       ssid: urlParams.get('ssid') || urlParams.get('ssidName'),
+      client_ip: urlParams.get('ip') || urlParams.get('client_ip') || urlParams.get('clientIp'),
       redirect_url: urlParams.get('url') || urlParams.get('redirect_url')
     };
     

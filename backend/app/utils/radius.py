@@ -154,15 +154,22 @@ def get_active_radius_sessions():
     try:
         result = db.execute(
             text("""
-                SELECT username, acctsessionid, nasipaddress, 
-                       acctstarttime, 
-                       acctinputoctets, acctoutputoctets,
-                       callingstationid, framedipaddress,
-                       calledstationid, nasportid,
-                       EXTRACT(EPOCH FROM (NOW() - acctstarttime))::int as duration
-                FROM radacct 
-                WHERE acctstoptime IS NULL
-                ORDER BY acctstarttime DESC
+                SELECT ra.username, ra.acctsessionid, ra.nasipaddress, 
+                       ra.acctstarttime, 
+                       ra.acctinputoctets, ra.acctoutputoctets,
+                       ra.callingstationid, 
+                       COALESCE(ra.framedipaddress::text, s.ip_address, '') as framedipaddress,
+                       ra.calledstationid, 
+                       COALESCE(ra.nasportid, s.ap_name, '') as nasportid,
+                       EXTRACT(EPOCH FROM (NOW() - ra.acctstarttime))::int as duration
+                FROM radacct ra
+                LEFT JOIN users u ON ra.username = u.mobile
+                LEFT JOIN sessions s ON ra.username = u.mobile 
+                    AND s.mac_address = ra.callingstationid 
+                    AND DATE(s.start_time) = DATE(ra.acctstarttime)
+                WHERE ra.acctstoptime IS NULL
+                AND (ra.acctterminatecause IS NULL OR ra.acctterminatecause NOT LIKE '%PENDING%')
+                ORDER BY ra.acctstarttime DESC
             """)
         ).fetchall()
         
@@ -228,6 +235,7 @@ def get_user_session_history(username: str, limit: int = 10):
                        calledstationid, nasportid
                 FROM radacct 
                 WHERE username = :username
+                AND (acctterminatecause IS NULL OR acctterminatecause NOT LIKE '%PENDING%')
                 ORDER BY acctstarttime DESC
                 LIMIT :limit
             """),

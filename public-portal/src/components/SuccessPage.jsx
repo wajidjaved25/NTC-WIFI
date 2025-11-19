@@ -25,6 +25,7 @@ function SuccessPage({ portalDesign, userData, omadaParams }) {
       const macAddress = omadaParams?.mac;
       const apMac = omadaParams?.ap_mac;
       const ssid = omadaParams?.ssid;
+      const clientIp = omadaParams?.client_ip;
       
       const finalMacAddress = macAddress || 'AA:BB:CC:DD:EE:FF';
       
@@ -39,6 +40,7 @@ function SuccessPage({ portalDesign, userData, omadaParams }) {
         mac_address: finalMacAddress,
         ap_mac: apMac,
         ssid: ssid,
+        client_ip: clientIp,
       });
 
       setAuthorized(true);
