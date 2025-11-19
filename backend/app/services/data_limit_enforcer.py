@@ -177,8 +177,10 @@ class DataLimitEnforcer:
     
     async def _enforce_limit(self, db: Session, username: str, reason: str):
         """
-        Enforce data limit by setting a very short Session-Timeout.
-        This forces the user to re-authenticate, and FreeRADIUS will reject them.
+        Enforce data limit by:
+        1. Sending RADIUS CoA Disconnect to immediately kick user
+        2. Setting short Session-Timeout to prevent long sessions if they reconnect
+        3. Marking session as stopped in radacct
         
         Args:
             db: Database session
@@ -186,7 +188,7 @@ class DataLimitEnforcer:
             reason: Why they exceeded the limit
         """
         
-        # Skip if we already set short timeout for this user
+        # Skip if we already processed this user
         if username in self._users_timeout_set:
             return
         
@@ -194,13 +196,33 @@ class DataLimitEnforcer:
         logging.warning(f"Enforcing limit for {username}: {reason}")
         
         try:
-            # Set a very short Session-Timeout (60 seconds)
-            # This will cause Omada to disconnect the user when their session times out
-            # When they reconnect, FreeRADIUS sqlcounter will reject them
+            # Get session info for CoA
+            session_info = db.execute(
+                text("""
+                    SELECT acctsessionid, callingstationid, nasipaddress, framedipaddress
+                    FROM radacct
+                    WHERE username = :username
+                    AND acctstoptime IS NULL
+                    ORDER BY acctstarttime DESC
+                    LIMIT 1
+                """),
+                {"username": username}
+            ).fetchone()
             
+            coa_success = False
+            if session_info:
+                session_id = session_info[0]
+                mac_address = session_info[1]
+                nas_ip = str(session_info[2]) if session_info[2] else "192.168.3.254"
+                
+                # Send RADIUS CoA Disconnect
+                coa_success = await self._send_radius_coa_disconnect(
+                    db, username, session_id, mac_address, nas_ip
+                )
+            
+            # Set short Session-Timeout for future connections
             SHORT_TIMEOUT = 60  # seconds
             
-            # Check if Session-Timeout exists for this user
             existing = db.execute(
                 text("""
                     SELECT id FROM radreply 
@@ -210,7 +232,6 @@ class DataLimitEnforcer:
             ).fetchone()
             
             if existing:
-                # Update existing
                 db.execute(
                     text("""
                         UPDATE radreply 
@@ -220,7 +241,6 @@ class DataLimitEnforcer:
                     {"username": username, "timeout": str(SHORT_TIMEOUT)}
                 )
             else:
-                # Insert new
                 db.execute(
                     text("""
                         INSERT INTO radreply (username, attribute, op, value)
@@ -229,20 +249,96 @@ class DataLimitEnforcer:
                     {"username": username, "timeout": str(SHORT_TIMEOUT)}
                 )
             
+            # Mark session as stopped if CoA succeeded
+            if coa_success:
+                db.execute(
+                    text("""
+                        UPDATE radacct 
+                        SET acctstoptime = NOW(),
+                            acctterminatecause = 'Data-Limit-Exceeded'
+                        WHERE username = :username 
+                        AND acctstoptime IS NULL
+                    """),
+                    {"username": username}
+                )
+            
             db.commit()
             
             # Add to tracked set
             self._users_timeout_set.add(username)
             
-            print(f"✓ Set Session-Timeout to {SHORT_TIMEOUT}s for {username}")
-            print(f"  User will be disconnected by Omada within {SHORT_TIMEOUT}s")
-            print(f"  Re-authentication will be rejected by FreeRADIUS sqlcounter")
-            logging.info(f"Set Session-Timeout to {SHORT_TIMEOUT}s for {username}")
+            if coa_success:
+                print(f"✓ Successfully disconnected {username} via RADIUS CoA")
+                logging.info(f"Successfully disconnected {username} via RADIUS CoA")
+            else:
+                print(f"⚠️ CoA failed for {username}, but Session-Timeout set to {SHORT_TIMEOUT}s")
+                logging.warning(f"CoA failed for {username}, Session-Timeout set to {SHORT_TIMEOUT}s")
             
         except Exception as e:
-            print(f"❌ Failed to set Session-Timeout for {username}: {e}")
-            logging.error(f"Failed to set Session-Timeout for {username}: {e}", exc_info=True)
+            print(f"❌ Failed to enforce limit for {username}: {e}")
+            logging.error(f"Failed to enforce limit for {username}: {e}", exc_info=True)
             db.rollback()
+    
+    async def _send_radius_coa_disconnect(self, db: Session, username: str, session_id: str, mac_address: str, nas_ip: str) -> bool:
+        """
+        Send RADIUS CoA Disconnect-Request to immediately disconnect user.
+        
+        Returns:
+            bool: True if disconnect was acknowledged, False otherwise
+        """
+        try:
+            import shutil
+            
+            # Check if radclient is available
+            if not shutil.which('radclient'):
+                print("⚠️ radclient not found - install with: sudo apt install freeradius-utils")
+                return False
+            
+            # Get RADIUS shared secret from settings
+            settings = db.query(RadiusSettings).first()
+            coa_secret = settings.radius_secret if settings and settings.radius_secret else "MySecretRadius2024!"
+            
+            # Build the disconnect request
+            # Using here-doc style for proper attribute formatting
+            disconnect_cmd = f'''radclient -x {nas_ip}:3799 disconnect {coa_secret} << EOF
+User-Name = "{username}"
+Acct-Session-Id = "{session_id}"
+Calling-Station-Id = "{mac_address}"
+NAS-IP-Address = {nas_ip}
+EOF'''
+            
+            print(f"Sending RADIUS CoA Disconnect to {nas_ip}:3799 for {username}")
+            
+            # Execute the command
+            process = await asyncio.create_subprocess_shell(
+                disconnect_cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=10.0
+            )
+            
+            output = stdout.decode() + stderr.decode()
+            
+            if 'Disconnect-ACK' in output:
+                print(f"✓ RADIUS CoA Disconnect-ACK received for {username}")
+                return True
+            elif 'Disconnect-NAK' in output:
+                print(f"⚠️ RADIUS CoA Disconnect-NAK for {username}: {output}")
+                return False
+            else:
+                print(f"⚠️ RADIUS CoA unexpected response for {username}: {output}")
+                return False
+                
+        except asyncio.TimeoutError:
+            print(f"⚠️ RADIUS CoA timed out for {username}")
+            return False
+        except Exception as e:
+            print(f"⚠️ RADIUS CoA error for {username}: {e}")
+            return False
 
 
 # Global enforcer instance
