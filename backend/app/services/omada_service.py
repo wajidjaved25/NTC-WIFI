@@ -269,32 +269,66 @@ class OmadaService:
                 if not self.login():
                     return {"success": False, "message": "Authentication failed"}
             
-            base_url = self._get_base_api_url()
-            unauth_url = f"{base_url}/hotspot/sites/{self.site_id}/clients/{mac_address}/unauthorize"
+            # Normalize MAC address
+            mac_clean = mac_address.replace('-', '').replace(':', '').replace('.', '').lower()
+            mac_formatted = '-'.join(mac_clean[i:i+2] for i in range(0, 12, 2)).upper()
             
-            payload = {
-                "mac": mac_address
+            base_url = self._get_base_api_url()
+            
+            # Try multiple endpoint formats as Omada versions differ
+            endpoints = [
+                # Format 1: Hotspot portal deauth
+                f"{base_url}/hotspot/extPortal/deauth",
+                # Format 2: Site clients unauthorize
+                f"{base_url}/sites/{self.site_id}/clients/{mac_formatted}/unauthorize",
+                # Format 3: Hotspot sites format
+                f"{base_url}/hotspot/sites/{self.site_id}/clients/{mac_formatted}/unauthorize",
+            ]
+            
+            # Payload for deauth endpoint
+            deauth_payload = {
+                "clientMac": mac_formatted,
+                "site": self.site_id
             }
             
-            response = self.session.post(unauth_url, json=payload, timeout=10)
+            # Simple payload for other endpoints
+            simple_payload = {
+                "mac": mac_formatted
+            }
             
-            if response.status_code == 200:
-                data = response.json()
-                if data.get('errorCode') == 0:
-                    return {
-                        "success": True,
-                        "message": "Client unauthorized successfully"
-                    }
-                else:
-                    return {
-                        "success": False,
-                        "message": f"Unauthorization failed: {data.get('msg')}"
-                    }
-            else:
-                return {
-                    "success": False,
-                    "message": f"Request failed with status {response.status_code}"
-                }
+            for i, unauth_url in enumerate(endpoints):
+                try:
+                    print(f"Trying unauthorize endpoint {i+1}: {unauth_url}")
+                    
+                    # Use appropriate payload
+                    payload = deauth_payload if "deauth" in unauth_url else simple_payload
+                    
+                    response = self.session.post(unauth_url, json=payload, timeout=10)
+                    
+                    print(f"Response: {response.status_code} - {response.text[:200]}")
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data.get('errorCode') == 0:
+                            return {
+                                "success": True,
+                                "message": "Client unauthorized successfully"
+                            }
+                        else:
+                            print(f"Error: {data.get('msg')}")
+                    elif response.status_code == 404:
+                        continue  # Try next endpoint
+                    else:
+                        print(f"HTTP {response.status_code}")
+                        
+                except Exception as e:
+                    print(f"Endpoint {i+1} failed: {e}")
+                    continue
+            
+            return {
+                "success": False,
+                "message": "All unauthorize endpoints failed"
+            }
         
         except Exception as e:
             logger.error(f"Exception during client unauthorization: {str(e)}")
