@@ -1,0 +1,48 @@
+# ============================================
+# FreeRADIUS sqlcounter Configuration
+# ============================================
+# 
+# This configuration file sets up daily and monthly data usage counters
+# Save this to: /etc/freeradius/3.0/mods-available/sqlcounter
+# 
+# Then enable it with:
+#   cd /etc/freeradius/3.0/mods-enabled
+#   sudo ln -s ../mods-available/sqlcounter .
+
+# Daily data usage counter (in bytes)
+sqlcounter daily_data_counter {
+    sql_module_instance = sql
+    dialect = postgresql
+    
+    counter_name = Daily-Data-Usage
+    check_name = Max-Daily-Data
+    reply_name = Daily-Data-Remaining
+    
+    key = User-Name
+    reset = daily
+    
+    query = "\
+        SELECT COALESCE(SUM(acctinputoctets + acctoutputoctets), 0) \
+        FROM radacct \
+        WHERE username = '%{${key}}' \
+        AND acctstarttime >= date_trunc('day', CURRENT_TIMESTAMP)"
+}
+
+# Monthly data usage counter (in bytes)
+sqlcounter monthly_data_counter {
+    sql_module_instance = sql
+    dialect = postgresql
+    
+    counter_name = Monthly-Data-Usage
+    check_name = Max-Monthly-Data
+    reply_name = Monthly-Data-Remaining
+    
+    key = User-Name
+    reset = monthly
+    
+    query = "\
+        SELECT COALESCE(SUM(acctinputoctets + acctoutputoctets), 0) \
+        FROM radacct \
+        WHERE username = '%{${key}}' \
+        AND acctstarttime >= date_trunc('month', CURRENT_TIMESTAMP)"
+}

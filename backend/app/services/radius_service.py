@@ -21,9 +21,11 @@ class RadiusService:
         password: str,
         session_timeout: int = 3600,
         bandwidth_up: Optional[int] = None,
-        bandwidth_down: Optional[int] = None
+        bandwidth_down: Optional[int] = None,
+        daily_data_limit: Optional[int] = None,
+        monthly_data_limit: Optional[int] = None
     ) -> bool:
-        """Create or update RADIUS user"""
+        """Create or update RADIUS user with all limits"""
         
         try:
             # Delete existing user entries
@@ -54,7 +56,7 @@ class RadiusService:
                 {"username": username, "timeout": str(session_timeout)}
             )
             
-            # Insert bandwidth limits if provided
+            # Insert bandwidth limits if provided (in bps)
             if bandwidth_up:
                 self.db.execute(
                     text("""
@@ -71,6 +73,27 @@ class RadiusService:
                         VALUES (:username, 'WISPr-Bandwidth-Max-Down', '=', :bw_down)
                     """),
                     {"username": username, "bw_down": str(bandwidth_down)}
+                )
+            
+            # Insert daily data limit if provided (in bytes)
+            # This is checked by FreeRADIUS sqlcounter module
+            if daily_data_limit and daily_data_limit > 0:
+                self.db.execute(
+                    text("""
+                        INSERT INTO radcheck (username, attribute, op, value)
+                        VALUES (:username, 'Max-Daily-Data', ':=', :limit)
+                    """),
+                    {"username": username, "limit": str(daily_data_limit)}
+                )
+            
+            # Insert monthly data limit if provided (in bytes)
+            if monthly_data_limit and monthly_data_limit > 0:
+                self.db.execute(
+                    text("""
+                        INSERT INTO radcheck (username, attribute, op, value)
+                        VALUES (:username, 'Max-Monthly-Data', ':=', :limit)
+                    """),
+                    {"username": username, "limit": str(monthly_data_limit)}
                 )
             
             self.db.commit()

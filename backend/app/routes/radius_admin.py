@@ -3,6 +3,7 @@ Admin Routes for RADIUS Session Management
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from typing import List
 
 from ..database import get_db
@@ -155,6 +156,137 @@ async def delete_user(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/users/{username}/data-usage")
+async def get_user_data_usage_endpoint(
+    username: str,
+    current_user: Admin = Depends(require_session_permission)
+):
+    """Get data usage for a specific user"""
+    from ..services.data_limit_enforcer import get_user_data_usage
+    
+    try:
+        usage = await get_user_data_usage(username)
+        return {
+            "success": True,
+            "data": usage
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/data-usage/all")
+async def get_all_users_data_usage(
+    current_user: Admin = Depends(require_session_permission),
+    db: Session = Depends(get_db)
+):
+    """Get data usage for all active users"""
+    from ..services.data_limit_enforcer import get_user_data_usage
+    from ..models.radius_settings import RadiusSettings
+    
+    try:
+        # Get settings for limits
+        settings = db.query(RadiusSettings).first()
+        
+        # Get all active usernames
+        result = db.execute(
+            text("""
+                SELECT DISTINCT username 
+                FROM radacct 
+                WHERE acctstoptime IS NULL
+                ORDER BY username
+            """)
+        ).fetchall()
+        
+        users_usage = []
+        for (username,) in result:
+            usage = await get_user_data_usage(username)
+            users_usage.append(usage)
+        
+        return {
+            "success": True,
+            "count": len(users_usage),
+            "global_limits": {
+                "daily_mb": settings.daily_data_limit if settings else 0,
+                "monthly_mb": settings.monthly_data_limit if settings else 0
+            },
+            "users": users_usage
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/enforce-limits")
+async def enforce_data_limits(
+    current_user: Admin = Depends(require_session_permission)
+):
+    """Manually trigger data limit enforcement check"""
+    from ..services.data_limit_enforcer import data_limit_enforcer
+    
+    try:
+        await data_limit_enforcer._check_and_enforce()
+        return {
+            "success": True,
+            "message": "Data limit enforcement check completed"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/users/{username}/data-limit")
+async def set_user_data_limit(
+    username: str,
+    daily_mb: int = 0,
+    monthly_mb: int = 0,
+    current_user: Admin = Depends(require_session_permission),
+    db: Session = Depends(get_db)
+):
+    """Set custom data limits for a specific user (0 = use global/unlimited)"""
+    
+    try:
+        # Remove existing limits
+        db.execute(
+            text("""
+                DELETE FROM radcheck 
+                WHERE username = :username 
+                AND attribute IN ('Max-Daily-Data', 'Max-Monthly-Data')
+            """),
+            {"username": username}
+        )
+        
+        # Add new limits if specified
+        if daily_mb > 0:
+            db.execute(
+                text("""
+                    INSERT INTO radcheck (username, attribute, op, value)
+                    VALUES (:username, 'Max-Daily-Data', ':=', :limit)
+                """),
+                {"username": username, "limit": str(daily_mb * 1048576)}
+            )
+        
+        if monthly_mb > 0:
+            db.execute(
+                text("""
+                    INSERT INTO radcheck (username, attribute, op, value)
+                    VALUES (:username, 'Max-Monthly-Data', ':=', :limit)
+                """),
+                {"username": username, "limit": str(monthly_mb * 1048576)}
+            )
+        
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": f"Data limits updated for {username}",
+            "limits": {
+                "daily_mb": daily_mb,
+                "monthly_mb": monthly_mb
+            }
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/settings")
 async def get_radius_settings(
     current_user: Admin = Depends(require_session_permission),
@@ -267,26 +399,80 @@ async def update_radius_settings(
     
     # Apply to all existing users if requested
     if settings_data.get('apply_to_all', False):
-        db.execute(
-            text("""
-                UPDATE radreply 
-                SET value = :timeout 
-                WHERE attribute = 'Session-Timeout'
-            """),
-            {"timeout": str(settings.default_session_timeout)}
-        )
+        # Get all usernames
+        all_users = db.execute(
+            text("SELECT DISTINCT username FROM radcheck WHERE attribute = 'Cleartext-Password'")
+        ).fetchall()
         
-        if settings.default_bandwidth_down > 0:
+        for (username,) in all_users:
+            # Update session timeout
             db.execute(
                 text("""
                     UPDATE radreply 
-                    SET value = :bandwidth 
-                    WHERE attribute = 'WISPr-Bandwidth-Max-Down'
+                    SET value = :timeout 
+                    WHERE username = :username AND attribute = 'Session-Timeout'
                 """),
-                {"bandwidth": str(settings.default_bandwidth_down * 1000)}
+                {"username": username, "timeout": str(settings.default_session_timeout)}
             )
+            
+            # Update/remove bandwidth limits
+            if settings.default_bandwidth_down > 0:
+                # Check if exists
+                exists = db.execute(
+                    text("SELECT id FROM radreply WHERE username = :username AND attribute = 'WISPr-Bandwidth-Max-Down'"),
+                    {"username": username}
+                ).fetchone()
+                
+                if exists:
+                    db.execute(
+                        text("""
+                            UPDATE radreply 
+                            SET value = :bandwidth 
+                            WHERE username = :username AND attribute = 'WISPr-Bandwidth-Max-Down'
+                        """),
+                        {"username": username, "bandwidth": str(settings.default_bandwidth_down * 1000)}
+                    )
+                else:
+                    db.execute(
+                        text("""
+                            INSERT INTO radreply (username, attribute, op, value)
+                            VALUES (:username, 'WISPr-Bandwidth-Max-Down', '=', :bandwidth)
+                        """),
+                        {"username": username, "bandwidth": str(settings.default_bandwidth_down * 1000)}
+                    )
+            
+            # Update/remove daily data limits
+            # First remove existing
+            db.execute(
+                text("DELETE FROM radcheck WHERE username = :username AND attribute = 'Max-Daily-Data'"),
+                {"username": username}
+            )
+            # Add if set
+            if settings.daily_data_limit > 0:
+                db.execute(
+                    text("""
+                        INSERT INTO radcheck (username, attribute, op, value)
+                        VALUES (:username, 'Max-Daily-Data', ':=', :limit)
+                    """),
+                    {"username": username, "limit": str(settings.daily_data_limit * 1048576)}
+                )
+            
+            # Update/remove monthly data limits
+            db.execute(
+                text("DELETE FROM radcheck WHERE username = :username AND attribute = 'Max-Monthly-Data'"),
+                {"username": username}
+            )
+            if settings.monthly_data_limit > 0:
+                db.execute(
+                    text("""
+                        INSERT INTO radcheck (username, attribute, op, value)
+                        VALUES (:username, 'Max-Monthly-Data', ':=', :limit)
+                    """),
+                    {"username": username, "limit": str(settings.monthly_data_limit * 1048576)}
+                )
         
         db.commit()
+        print(f"✓ Applied settings to {len(all_users)} users")
     
     return {
         "success": True,

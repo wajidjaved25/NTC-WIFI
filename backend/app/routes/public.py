@@ -231,24 +231,32 @@ async def register_user(data: UserRegister, db: Session = Depends(get_db)):
         session_timeout = 3600  # Default 1 hour
         bandwidth_down = None
         bandwidth_up = None
+        daily_data_limit = None
+        monthly_data_limit = None
         
         if radius_settings:
             session_timeout = radius_settings.default_session_timeout
             if radius_settings.default_bandwidth_down > 0:
-                bandwidth_down = radius_settings.default_bandwidth_down * 1000  # Convert to bps
+                bandwidth_down = radius_settings.default_bandwidth_down * 1000  # Convert kbps to bps
             if radius_settings.default_bandwidth_up > 0:
-                bandwidth_up = radius_settings.default_bandwidth_up * 1000
+                bandwidth_up = radius_settings.default_bandwidth_up * 1000  # Convert kbps to bps
+            if radius_settings.daily_data_limit > 0:
+                daily_data_limit = radius_settings.daily_data_limit * 1048576  # Convert MB to bytes
+            if radius_settings.monthly_data_limit > 0:
+                monthly_data_limit = radius_settings.monthly_data_limit * 1048576  # Convert MB to bytes
         
         radius_created = radius_service.create_radius_user(
             username=mobile,
             password=radius_password,
             session_timeout=session_timeout,
             bandwidth_down=bandwidth_down,
-            bandwidth_up=bandwidth_up
+            bandwidth_up=bandwidth_up,
+            daily_data_limit=daily_data_limit,
+            monthly_data_limit=monthly_data_limit
         )
         
         if radius_created:
-            print(f"✓ RADIUS user created: {mobile} (timeout: {session_timeout}s)")
+            print(f"✓ RADIUS user created: {mobile} (timeout: {session_timeout}s, daily: {daily_data_limit}B, monthly: {monthly_data_limit}B)")
         else:
             print(f"✗ RADIUS user creation failed: {mobile}")
     except Exception as e:

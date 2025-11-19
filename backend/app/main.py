@@ -5,6 +5,7 @@ import os
 
 from .config import settings
 from .database import engine, Base
+from .services.data_limit_enforcer import data_limit_enforcer
 
 # Import all models (required for SQLAlchemy to create tables)
 from .models import (
@@ -61,10 +62,15 @@ async def startup_event():
     print(f"📍 Environment: {settings.APP_ENV}")
     print(f"🔗 Database: Connected")
     print(f"📁 Media Directory: {MEDIA_BASE}")
+    
+    # Start data limit enforcement
+    await data_limit_enforcer.start()
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown"""
+    # Stop data limit enforcer
+    await data_limit_enforcer.stop()
     print(f"🛑 {settings.APP_NAME} Shutting Down...")
 
 @app.get("/")
