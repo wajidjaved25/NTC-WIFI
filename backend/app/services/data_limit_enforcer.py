@@ -1,55 +1,46 @@
 """
 Data Limit Enforcement Service
-Real-time monitoring and enforcement of data usage limits
+Real-time monitoring and enforcement of data usage limits using Session-Timeout method
 """
 
 import asyncio
+import logging
 from datetime import datetime, timezone
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-import subprocess
-import logging
-import time
 
 from ..database import SessionLocal
 from ..models.radius_settings import RadiusSettings
 
-# Configure logging if not already done elsewhere
-# logging.basicConfig(level=logging.INFO)
 
 class DataLimitEnforcer:
     """
     Monitors active sessions and enforces data usage limits.
-    Prioritizes RADIUS CoA for disconnection, updates DB only on success,
-    and includes a recheck mechanism for failed disconnections.
+    Uses Session-Timeout approach to force re-authentication.
     """
     
-    def __init__(self, check_interval: int = 60, recheck_interval: int = 60):
+    def __init__(self, check_interval: int = 60):
         """
         Initialize the enforcer
         
         Args:
             check_interval: How often to check data usage (seconds)
-            recheck_interval: How often to recheck users marked for disconnection (seconds)
         """
         self.check_interval = check_interval
-        self.recheck_interval = recheck_interval
         self.running = False
         self._task = None
-        self._recheck_task = None
-        # Track users marked for disconnection to trigger recheck
-        self._users_to_recheck = set()
+        # Track users who have been marked for short timeout to avoid repeated updates
+        self._users_timeout_set = set()
 
     async def start(self):
-        """Start the enforcement and recheck loops"""
+        """Start the enforcement loop"""
         self.running = True
         self._task = asyncio.create_task(self._enforcement_loop())
-        self._recheck_task = asyncio.create_task(self._recheck_loop())
-        print(f"📊 Data Limit Enforcer started (checking every {self.check_interval}s, rechecking every {self.recheck_interval}s)")
-        logging.info(f"📊 Data Limit Enforcer started (checking every {self.check_interval}s, rechecking every {self.recheck_interval}s)")
+        print(f"📊 Data Limit Enforcer started (checking every {self.check_interval}s)")
+        logging.info(f"Data Limit Enforcer started (checking every {self.check_interval}s)")
     
     async def stop(self):
-        """Stop the enforcement and recheck loops"""
+        """Stop the enforcement loop"""
         self.running = False
         if self._task:
             self._task.cancel()
@@ -57,14 +48,8 @@ class DataLimitEnforcer:
                 await self._task
             except asyncio.CancelledError:
                 pass
-        if self._recheck_task:
-            self._recheck_task.cancel()
-            try:
-                await self._recheck_task
-            except asyncio.CancelledError:
-                pass
         print("📊 Data Limit Enforcer stopped")
-        logging.info("📊 Data Limit Enforcer stopped")
+        logging.info("Data Limit Enforcer stopped")
     
     async def _enforcement_loop(self):
         """Main enforcement loop"""
@@ -73,20 +58,9 @@ class DataLimitEnforcer:
                 await self._check_and_enforce()
             except Exception as e:
                 print(f"❌ Data limit enforcement error: {e}")
-                logging.error(f"❌ Data limit enforcement error: {e}", exc_info=True)
+                logging.error(f"Data limit enforcement error: {e}", exc_info=True)
             
             await asyncio.sleep(self.check_interval)
-
-    async def _recheck_loop(self):
-        """Loop to recheck users who might still be connected after disconnection attempts"""
-        while self.running:
-            try:
-                await self._recheck_disconnections()
-            except Exception as e:
-                print(f"❌ Data limit recheck error: {e}")
-                logging.error(f"❌ Data limit recheck error: {e}", exc_info=True)
-
-            await asyncio.sleep(self.recheck_interval)
 
     async def _check_and_enforce(self):
         """Check all active sessions and enforce limits"""
@@ -99,19 +73,21 @@ class DataLimitEnforcer:
             if not settings:
                 return
             
-            global_daily_limit = settings.daily_data_limit * 1048576 if settings.daily_data_limit else 0  # MB to bytes
+            global_daily_limit = settings.daily_data_limit * 1048576 if settings.daily_data_limit else 0
             global_monthly_limit = settings.monthly_data_limit * 1048576 if settings.monthly_data_limit else 0
             
             # Skip if no limits configured
             if global_daily_limit == 0 and global_monthly_limit == 0:
                 return
             
-            # Get all active sessions with their data usage
+            # Get all active sessions
             active_users = db.execute(
                 text("""
                     SELECT DISTINCT username 
                     FROM radacct 
                     WHERE acctstoptime IS NULL
+                    AND username IS NOT NULL
+                    AND username != ''
                 """)
             ).fetchall()
             
@@ -124,115 +100,14 @@ class DataLimitEnforcer:
                 )
                 
                 if exceeded:
-                    # Add user to recheck list before attempting disconnection
-                    self._users_to_recheck.add(username)
-                    await self._disconnect_user(db, username, exceeded)
+                    await self._enforce_limit(db, username, exceeded)
+                else:
+                    # User is within limits, remove from timeout set if they were there
+                    self._users_timeout_set.discard(username)
         
         finally:
             db.close()
     
-    async def _recheck_disconnections(self):
-        """Recheck users who were marked for disconnection to see if they are still connected."""
-        if not self._users_to_recheck:
-            return # No users to recheck
-
-        db = SessionLocal()
-        omada_clients = set() # To store currently connected clients from Omada
-
-        try:
-            # Get active Omada config
-            from ..models.omada_config import OmadaConfig
-            omada_config = db.query(OmadaConfig).filter(OmadaConfig.is_active == True).first()
-            
-            if omada_config:
-                 # Fetch currently connected clients from Omada Controller
-                 omada_clients = await self._get_omada_connected_clients(omada_config)
-                 logging.debug(f"Recheck: Found {len(omada_clients)} clients connected on Omada.")
-
-            users_to_remove = set()
-            for username in self._users_to_recheck.copy(): # Iterate over a copy to safely remove
-                # Check if the user is still active in radacct
-                active_session = db.execute(
-                    text("""
-                        SELECT callingstationid, nasipaddress, acctsessionid
-                        FROM radacct
-                        WHERE username = :username
-                        AND acctstoptime IS NULL
-                        ORDER BY acctstarttime DESC
-                        LIMIT 1
-                    """),
-                    {"username": username}
-                ).fetchone()
-
-                if not active_session:
-                     # User is no longer active in radacct, remove from recheck list
-                     users_to_remove.add(username)
-                     continue
-
-                mac_address, nas_ip, acct_session_id = active_session
-                mac_normalized = mac_address.replace('-', '').replace(':', '').replace('.', '').lower()
-                mac_api_format = ':'.join(mac_normalized[i:i+2] for i in range(0, 12, 2))
-
-                # Check if the client is still connected according to Omada
-                if mac_api_format in omada_clients:
-                    print(f"🔄 Recheck: User {username} (MAC {mac_api_format}) still connected on Omada. Retrying disconnection.")
-                    logging.info(f"🔄 Recheck: User {username} (MAC {mac_api_format}) still connected on Omada. Retrying disconnection.")
-                    # Retry disconnection for this specific user
-                    exceeded_reason = await self._check_user_limits(db, username, 0, 0) # Re-check limit (could be redundant, but ensures state)
-                    if exceeded_reason: # Confirm limit is still exceeded
-                        await self._disconnect_user(db, username, exceeded_reason, recheck=True) # Pass recheck flag
-                    else:
-                        # Limit no longer exceeded, remove from recheck
-                        users_to_remove.add(username)
-                else:
-                    # Client not found on Omada, assume disconnected successfully
-                    print(f"🔄 Recheck: User {username} (MAC {mac_api_format}) not found on Omada, considered disconnected.")
-                    logging.info(f"🔄 Recheck: User {username} (MAC {mac_api_format}) not found on Omada, considered disconnected.")
-                    users_to_remove.add(username)
-
-            # Remove users who are confirmed disconnected or no longer active from the recheck list
-            self._users_to_recheck.difference_update(users_to_remove)
-
-        except Exception as e:
-            print(f"❌ Error during recheck: {e}")
-            logging.error(f"❌ Error during recheck: {e}", exc_info=True)
-        finally:
-            db.close()
-
-
-    async def _get_omada_connected_clients(self, omada_config):
-        """Fetch currently connected clients from the Omada Controller."""
-        try:
-            from ..services.omada_service import OmadaService
-
-            # Create Omada service instance
-            omada_service = OmadaService(
-                controller_url=omada_config.controller_url,
-                username=omada_config.username,
-                encrypted_password=omada_config.password_encrypted,
-                controller_id=omada_config.controller_id,
-                site_id=omada_config.site_id or "Default"
-            )
-
-            # Attempt to get connected clients
-            # This assumes OmadaService has a method like get_connected_clients
-            # which returns a list/dict of active client MAC addresses.
-            # The exact API call might be GET /api/v2/sites/{siteId}/clients
-            # You'll need to implement this method in your OmadaService.
-            connected_clients_data = omada_service.get_connected_clients() # Placeholder - implement this in OmadaService
-
-            # Extract MAC addresses from the response data
-            # The structure of connected_clients_data depends on the Omada API response
-            # Example: [{ "mac": "aa:bb:cc:dd:ee:ff", ...}, ...]
-            connected_macs = {client['mac'].lower() for client in connected_clients_data if 'mac' in client}
-            return connected_macs
-
-        except Exception as e:
-            print(f"⚠️ Error fetching connected clients from Omada for recheck: {e}")
-            logging.error(f"⚠️ Error fetching connected clients from Omada for recheck: {e}", exc_info=True)
-            # Return an empty set on error, leading to potential missed rechecks
-            return set()
-
     async def _check_user_limits(
         self, 
         db: Session, 
@@ -300,221 +175,78 @@ class DataLimitEnforcer:
         
         return ""
     
-    async def _disconnect_user(self, db: Session, username: str, reason: str, recheck: bool = False):
+    async def _enforce_limit(self, db: Session, username: str, reason: str):
         """
-        Disconnect user from the network.
-        Only updates the database if disconnection is confirmed successful.
+        Enforce data limit by setting a very short Session-Timeout.
+        This forces the user to re-authenticate, and FreeRADIUS will reject them.
         
         Args:
             db: Database session
-            username: User to disconnect
-            reason: Why they're being disconnected
-            recheck: True if this is a recheck attempt
+            username: User who exceeded limit
+            reason: Why they exceeded the limit
         """
         
-        log_prefix = "🔄 Recheck: " if recheck else "⚠️ "
-        print(f"{log_prefix}Disconnecting {username}: {reason}")
-        logging.warning(f"{log_prefix}Disconnecting {username}: {reason}")
+        # Skip if we already set short timeout for this user
+        if username in self._users_timeout_set:
+            return
+        
+        print(f"⚠️ Enforcing limit for {username}: {reason}")
+        logging.warning(f"Enforcing limit for {username}: {reason}")
         
         try:
-            # Get the user's MAC address, NAS IP, and Session ID from active session
-            session_info = db.execute(
+            # Set a very short Session-Timeout (60 seconds)
+            # This will cause Omada to disconnect the user when their session times out
+            # When they reconnect, FreeRADIUS sqlcounter will reject them
+            
+            SHORT_TIMEOUT = 60  # seconds
+            
+            # Check if Session-Timeout exists for this user
+            existing = db.execute(
                 text("""
-                    SELECT callingstationid, nasipaddress, acctsessionid
-                    FROM radacct
-                    WHERE username = :username
-                    AND acctstoptime IS NULL
-                    ORDER BY acctstarttime DESC
-                    LIMIT 1
+                    SELECT id FROM radreply 
+                    WHERE username = :username AND attribute = 'Session-Timeout'
                 """),
                 {"username": username}
             ).fetchone()
             
-            if not session_info:
-                 print(f"{log_prefix}User {username} has no active session to disconnect.")
-                 logging.warning(f"{log_prefix}User {username} has no active session to disconnect.")
-                 # If this was a recheck attempt and session is gone, remove from list
-                 if recheck:
-                     self._users_to_recheck.discard(username)
-                 return
-
-            mac_address, nas_ip, acct_session_id = session_info
-            
-            # Method 1: Send RADIUS Disconnect-Request (CoA) - Primary method
-            radius_success = False
-            if nas_ip and acct_session_id:
-                radius_success = await self._send_radius_disconnect(username, nas_ip, acct_session_id)
-            
-            # Method 2: Disconnect via Omada API (fallback if CoA fails or not available)
-            omada_success = False
-            if not radius_success and mac_address: # Only try Omada if CoA failed or wasn't attempted
-                omada_success = await self._disconnect_via_omada(db, mac_address)
-
-            # Determine overall success
-            disconnection_successful = radius_success or omada_success
-
-            if disconnection_successful:
-                # Only mark session as stopped in radacct if disconnection was confirmed
-                rows_affected = db.execute(
+            if existing:
+                # Update existing
+                db.execute(
                     text("""
-                        UPDATE radacct 
-                        SET acctstoptime = NOW(),
-                            acctterminatecause = :reason
-                        WHERE username = :username 
-                        AND acctstoptime IS NULL
-                        AND acctsessionid = :session_id -- Ensure we update the correct session
+                        UPDATE radreply 
+                        SET value = :timeout 
+                        WHERE username = :username AND attribute = 'Session-Timeout'
                     """),
-                    {"username": username, "reason": "Data-Limit-Exceeded", "session_id": acct_session_id}
-                ).rowcount
-                db.commit()
-
-                if rows_affected > 0:
-                    print(f"{log_prefix}✓ Disconnected {username} (marked session stopped)")
-                    logging.info(f"{log_prefix}✓ Disconnected {username} (marked session stopped)")
-                    # Remove user from recheck list on successful disconnection
-                    self._users_to_recheck.discard(username)
-                else:
-                    print(f"{log_prefix}! Warning: Disconnection reported successful, but no radacct row was updated for {username}.")
-                    logging.warning(f"{log_prefix}Disconnection reported successful, but no radacct row was updated for {username}.")
+                    {"username": username, "timeout": str(SHORT_TIMEOUT)}
+                )
             else:
-                print(f"{log_prefix}❌ Failed to confirm disconnection for {username}. Database not updated.")
-                logging.error(f"{log_prefix}❌ Failed to confirm disconnection for {username}. Database not updated.")
-                # Keep user in recheck list if disconnection failed
-                if not recheck:
-                    self._users_to_recheck.add(username)
-
+                # Insert new
+                db.execute(
+                    text("""
+                        INSERT INTO radreply (username, attribute, op, value)
+                        VALUES (:username, 'Session-Timeout', '=', :timeout)
+                    """),
+                    {"username": username, "timeout": str(SHORT_TIMEOUT)}
+                )
+            
+            db.commit()
+            
+            # Add to tracked set
+            self._users_timeout_set.add(username)
+            
+            print(f"✓ Set Session-Timeout to {SHORT_TIMEOUT}s for {username}")
+            print(f"  User will be disconnected by Omada within {SHORT_TIMEOUT}s")
+            print(f"  Re-authentication will be rejected by FreeRADIUS sqlcounter")
+            logging.info(f"Set Session-Timeout to {SHORT_TIMEOUT}s for {username}")
+            
         except Exception as e:
-            print(f"{log_prefix}❌ Failed to process disconnection for {username}: {e}")
-            logging.error(f"{log_prefix}❌ Failed to process disconnection for {username}: {e}", exc_info=True)
+            print(f"❌ Failed to set Session-Timeout for {username}: {e}")
+            logging.error(f"Failed to set Session-Timeout for {username}: {e}", exc_info=True)
             db.rollback()
-            # Keep user in recheck list on error
-            if not recheck:
-                self._users_to_recheck.add(username)
-    
-    async def _disconnect_via_omada(self, db: Session, mac_address: str) -> bool:
-        """
-        Disconnect user via Omada controller API.
-        Returns True if successful, False otherwise.
-        """
-        try:
-            from ..models.omada_config import OmadaConfig
-            from ..services.omada_service import OmadaService
-            
-            # Get active Omada config
-            omada_config = db.query(OmadaConfig).filter(OmadaConfig.is_active == True).first()
-            
-            if not omada_config:
-                print("⚠️ No active Omada configuration found for disconnection")
-                logging.warning("No active Omada configuration found for disconnection")
-                return False
-            
-            # Create Omada service instance
-            omada_service = OmadaService(
-                controller_url=omada_config.controller_url,
-                username=omada_config.username,
-                encrypted_password=omada_config.password_encrypted,
-                controller_id=omada_config.controller_id,
-                site_id=omada_config.site_id or "Default"
-            )
-            
-            # Normalize MAC address format (e.g., aa:bb:cc:dd:ee:ff)
-            mac_clean = mac_address.replace('-', '').replace(':', '').replace('.', '').lower()
-            mac_formatted = ':'.join(mac_clean[i:i+2] for i in range(0, 12, 2))
-            
-            print(f"Attempting to disconnect client {mac_formatted} via Omada API...")
-            logging.info(f"Attempting to disconnect client {mac_formatted} via Omada API...")
-
-            # Call the Omada service method to disconnect the client
-            # This method needs to correctly implement: DELETE /api/v2/sites/{siteId}/clients/{mac_formatted}
-            result = omada_service.unauthorize_client(mac_formatted) 
-
-            print(f"Omada API response: {result}") # Log the raw response for debugging
-            logging.debug(f"Omada API response for {mac_formatted}: {result}")
-
-            # Assuming the OmadaService method returns a dictionary like {'success': True/False, 'message': '...'}
-            if result and result.get('success'):
-                print(f"✓ Omada: Successfully disconnected client {mac_formatted}")
-                logging.info(f"Successfully disconnected client {mac_formatted} via Omada API")
-                return True
-            else:
-                # Log the specific error message from the Omada service
-                error_msg = result.get('message', 'Unknown error from Omada API') if isinstance(result, dict) else 'Invalid response format from Omada API'
-                print(f"⚠️ Omada: Failed to disconnect client {mac_formatted}. Reason: {error_msg}")
-                logging.error(f"Failed to disconnect client {mac_formatted} via Omada API. Reason: {error_msg}")
-                return False
-
-        except ImportError as e:
-            print(f"⚠️ Omada modules not found: {e}")
-            logging.error(f"Omada modules import failed: {e}")
-        except AttributeError as e:
-            print(f"⚠️ OmadaService might be missing the 'unauthorize_client' method: {e}")
-            logging.error(f"OmadaService method error: {e}")
-        except Exception as e:
-            # Catch any other unexpected errors during the Omada disconnection attempt
-            print(f"⚠️ Unexpected error during Omada disconnection for {mac_address}: {e}")
-            logging.error(f"Unexpected error during Omada disconnection for {mac_address}: {e}", exc_info=True)
-        return False # Return False on any error
-
-    async def _send_radius_disconnect(self, username: str, nas_ip: str, session_id: str) -> bool:
-        """
-        Send RADIUS Disconnect-Request to NAS using radclient.
-        Returns True if radclient command succeeds (not necessarily if NAS acts on it),
-        False if radclient is missing or command fails.
-        This method requires 'freeradius-utils' package to be installed.
-        Ensure the RADIUS shared secret ('testing123' in the command) matches the Omada Controller's CoA settings.
-        """
-        try:
-            # Check if radclient is available (cached check might be better for performance)
-            process = await asyncio.create_subprocess_shell(
-                "command -v radclient",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            _, _ = await process.communicate()
-            if process.returncode != 0:
-                print(f"⚠️ radclient not found, cannot send RADIUS disconnect for {username}")
-                logging.warning(f"radclient not found, cannot send RADIUS disconnect for {username}")
-                return False # Return False if radclient is not available
-
-            # Build disconnect command
-            # Ensure the shared secret ('testing123') matches the one configured on the Omada Controller for CoA
-            disconnect_cmd = f"""echo -e "User-Name={username}\\nAcct-Session-Id={session_id}" | radclient {nas_ip}:3799 disconnect testing123"""
-
-            print(f"DEBUG: Executing RADIUS disconnect command: {disconnect_cmd}") # Optional debug log
-            logging.debug(f"Executing RADIUS disconnect command for {username}: {disconnect_cmd}")
-
-            # Execute asynchronously
-            process = await asyncio.create_subprocess_shell(
-                disconnect_cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(),
-                timeout=5.0 # Timeout is good practice
-            )
-
-            if process.returncode == 0:
-                print(f"✓ RADIUS disconnect command sent to {nas_ip} for {username}")
-                logging.info(f"✓ RADIUS disconnect command sent to {nas_ip} for {username}")
-                return True # Command succeeded
-            else:
-                print(f"⚠️ RADIUS disconnect command failed for {username}: {stderr.decode().strip()}")
-                logging.error(f"⚠️ RADIUS disconnect command failed for {username}: {stderr.decode().strip()}")
-                return False # Command failed
-
-        except asyncio.TimeoutError:
-            print(f"⚠️ RADIUS disconnect command timed out for {username}")
-            logging.error(f"⚠️ RADIUS disconnect command timed out for {username}")
-        except Exception as e:
-            print(f"⚠️ RADIUS disconnect error for {username}: {e}")
-            logging.error(f"⚠️ RADIUS disconnect error for {username}: {e}", exc_info=True)
-        return False # Return False on any error
 
 
 # Global enforcer instance
-data_limit_enforcer = DataLimitEnforcer(check_interval=60, recheck_interval=60)  # Check every 60s, recheck every 60s
+data_limit_enforcer = DataLimitEnforcer(check_interval=60)
 
 
 async def get_user_data_usage(username: str) -> dict:
@@ -572,10 +304,10 @@ async def get_user_data_usage(username: str) -> dict:
         
         monthly_usage = db.execute(
             text("""
-                    SELECT COALESCE(SUM(acctinputoctets + acctoutputoctets), 0)
-                    FROM radacct
-                    WHERE username = :username
-                    AND acctstarttime >= date_trunc('month', CURRENT_TIMESTAMP)
+                SELECT COALESCE(SUM(acctinputoctets + acctoutputoctets), 0)
+                FROM radacct
+                WHERE username = :username
+                AND acctstarttime >= date_trunc('month', CURRENT_TIMESTAMP)
             """),
             {"username": username}
         ).scalar()
