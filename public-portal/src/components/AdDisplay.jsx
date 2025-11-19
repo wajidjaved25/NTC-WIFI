@@ -236,7 +236,13 @@ function AdDisplay({ portalDesign, userData, onComplete, onSkip }) {
             ref={videoRef}
             src={currentAd.file_path}
             autoPlay
+            muted
+            playsInline
             onEnded={handleVideoEnd}
+            onError={(e) => {
+              console.error('Video failed to load:', currentAd.file_path);
+              handleNextAd();
+            }}
             onClick={handleAdClick}
             style={{
               maxWidth: '100%',
