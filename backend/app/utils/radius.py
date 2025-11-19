@@ -157,7 +157,8 @@ def get_active_radius_sessions():
                 SELECT username, acctsessionid, nasipaddress, 
                        acctstarttime, 
                        acctinputoctets, acctoutputoctets,
-                       callingstationid,
+                       callingstationid, framedipaddress,
+                       calledstationid, nasportid,
                        EXTRACT(EPOCH FROM (NOW() - acctstarttime))::int as duration
                 FROM radacct 
                 WHERE acctstoptime IS NULL
@@ -167,15 +168,33 @@ def get_active_radius_sessions():
         
         sessions = []
         for row in result:
+            # Parse SSID from calledstationid (format: MAC:SSID or just MAC)
+            called_station = row[8] or ""
+            ssid = ""
+            ap_mac = ""
+            if ":" in called_station:
+                parts = called_station.split(":")
+                if len(parts) > 6:  # Has SSID after MAC
+                    ap_mac = ":".join(parts[:6])
+                    ssid = ":".join(parts[6:])
+                else:
+                    ap_mac = called_station
+            else:
+                ap_mac = called_station
+            
             sessions.append({
                 "username": row[0],
                 "session_id": row[1],
-                "nas_ip": str(row[2]),
+                "nas_ip": str(row[2]) if row[2] else "",
                 "start_time": row[3].isoformat() if row[3] else None,
                 "bytes_in": row[4] or 0,
                 "bytes_out": row[5] or 0,
                 "mac_address": row[6],
-                "duration": row[7] or 0
+                "ip_address": str(row[7]) if row[7] else "",
+                "ssid": ssid,
+                "ap_mac": ap_mac,
+                "ap_name": row[9] or "",  # nasportid often contains AP name/port info
+                "duration": row[10] or 0
             })
         
         return sessions
@@ -205,7 +224,8 @@ def get_user_session_history(username: str, limit: int = 10):
                        acctsessiontime,
                        acctinputoctets, acctoutputoctets,
                        acctterminatecause,
-                       callingstationid
+                       callingstationid, framedipaddress,
+                       calledstationid, nasportid
                 FROM radacct 
                 WHERE username = :username
                 ORDER BY acctstarttime DESC
@@ -216,16 +236,34 @@ def get_user_session_history(username: str, limit: int = 10):
         
         history = []
         for row in result:
+            # Parse SSID from calledstationid
+            called_station = row[10] or ""
+            ssid = ""
+            ap_mac = ""
+            if ":" in called_station:
+                parts = called_station.split(":")
+                if len(parts) > 6:
+                    ap_mac = ":".join(parts[:6])
+                    ssid = ":".join(parts[6:])
+                else:
+                    ap_mac = called_station
+            else:
+                ap_mac = called_station
+            
             history.append({
                 "session_id": row[0],
-                "nas_ip": str(row[1]),
+                "nas_ip": str(row[1]) if row[1] else "",
                 "start_time": row[2].isoformat() if row[2] else None,
                 "stop_time": row[3].isoformat() if row[3] else None,
                 "duration": row[4] or 0,
                 "bytes_in": row[5] or 0,
                 "bytes_out": row[6] or 0,
                 "terminate_cause": row[7],
-                "mac_address": row[8]
+                "mac_address": row[8],
+                "ip_address": str(row[9]) if row[9] else "",
+                "ssid": ssid,
+                "ap_mac": ap_mac,
+                "ap_name": row[11] or ""
             })
         
         return history
