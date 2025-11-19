@@ -160,7 +160,8 @@ def get_active_radius_sessions():
                        ra.acctinputoctets, ra.acctoutputoctets,
                        ra.callingstationid, 
                        COALESCE(ra.framedipaddress::text, s.ip_address, '') as framedipaddress,
-                       ra.calledstationid, 
+                       COALESCE(ra.calledstationid, '') as calledstationid, 
+                       COALESCE(s.ssid, '') as session_ssid,
                        COALESCE(ra.nasportid, s.ap_name, '') as nasportid,
                        EXTRACT(EPOCH FROM (NOW() - ra.acctstarttime))::int as duration
                 FROM radacct ra
@@ -170,7 +171,7 @@ def get_active_radius_sessions():
                     AND s.start_time >= ra.acctstarttime - INTERVAL '1 minute'
                     AND s.start_time <= ra.acctstarttime + INTERVAL '1 minute'
                 WHERE ra.acctstoptime IS NULL
-                AND (ra.acctterminatecause IS NULL OR ra.acctterminatecause NOT LIKE '%PENDING%')
+                AND (ra.acctterminatecause IS NULL OR (ra.acctterminatecause NOT LIKE '%PENDING%' AND ra.acctterminatecause != ''))
                 ORDER BY ra.acctsessionid, ra.acctstarttime DESC
             """)
         ).fetchall()
@@ -191,6 +192,11 @@ def get_active_radius_sessions():
             else:
                 ap_mac = called_station
             
+            # Use session SSID if available (from sessions table)
+            session_ssid = row[9] or ""
+            if session_ssid:
+                ssid = session_ssid
+            
             sessions.append({
                 "username": row[0],
                 "session_id": row[1],
@@ -202,8 +208,8 @@ def get_active_radius_sessions():
                 "ip_address": str(row[7]) if row[7] else "",
                 "ssid": ssid,
                 "ap_mac": ap_mac,
-                "ap_name": row[9] or "",  # nasportid often contains AP name/port info
-                "duration": row[10] or 0
+                "ap_name": row[10] or "",
+                "duration": row[11] or 0
             })
         
         return sessions

@@ -235,7 +235,8 @@ async def get_sessions(
                 u.id_type as user_id_type,
                 ra.callingstationid as mac_address,
                 COALESCE(ra.framedipaddress::text, s.ip_address, '') as ip_address,
-                ra.calledstationid as called_station,
+                COALESCE(ra.calledstationid, '') as called_station,
+                COALESCE(s.ssid, '') as session_ssid,
                 COALESCE(ra.nasportid, s.ap_name, '') as ap_name,
                 ra.acctstarttime as start_time,
                 ra.acctstoptime as end_time,
@@ -254,7 +255,8 @@ async def get_sessions(
                 AND s.mac_address = ra.callingstationid 
                 AND s.start_time >= ra.acctstarttime - INTERVAL '1 minute'
                 AND s.start_time <= ra.acctstarttime + INTERVAL '1 minute'
-            WHERE (ra.acctterminatecause IS NULL OR ra.acctterminatecause NOT LIKE '%PENDING%')
+            WHERE (ra.acctterminatecause IS NULL OR (ra.acctterminatecause NOT LIKE '%PENDING%' AND ra.acctterminatecause != ''))
+            AND (ra.acctsessiontime > 0 OR ra.acctstoptime IS NULL)
         """
         
         # Build RADIUS filter conditions
@@ -314,6 +316,10 @@ async def get_sessions(
                     ap_mac = called_station
             else:
                 ap_mac = called_station
+            
+            # Use session SSID if available (from sessions table)
+            if s.session_ssid:
+                ssid = s.session_ssid
             
             all_sessions.append({
                 "id": f"radius_{s.session_id}",
