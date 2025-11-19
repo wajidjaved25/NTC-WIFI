@@ -226,9 +226,9 @@ async def update_radius_settings(
     from ..models.radius_settings import RadiusSettings
     from sqlalchemy import text
     
-    # Only superadmin can change global settings
-    if current_user.role != "superadmin":
-        raise HTTPException(status_code=403, detail="Only superadmin can change global settings")
+    # Only superadmin and admin can change global settings
+    if current_user.role not in ["superadmin", "admin"]:
+        raise HTTPException(status_code=403, detail="Only superadmin and admin can change global settings")
     
     # Get or create settings
     settings = db.query(RadiusSettings).first()
