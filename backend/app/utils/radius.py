@@ -154,7 +154,8 @@ def get_active_radius_sessions():
     try:
         result = db.execute(
             text("""
-                SELECT ra.username, ra.acctsessionid, ra.nasipaddress, 
+                SELECT DISTINCT ON (ra.acctsessionid) 
+                       ra.username, ra.acctsessionid, ra.nasipaddress, 
                        ra.acctstarttime, 
                        ra.acctinputoctets, ra.acctoutputoctets,
                        ra.callingstationid, 
@@ -164,12 +165,13 @@ def get_active_radius_sessions():
                        EXTRACT(EPOCH FROM (NOW() - ra.acctstarttime))::int as duration
                 FROM radacct ra
                 LEFT JOIN users u ON ra.username = u.mobile
-                LEFT JOIN sessions s ON ra.username = u.mobile 
+                LEFT JOIN sessions s ON u.id = s.user_id 
                     AND s.mac_address = ra.callingstationid 
-                    AND DATE(s.start_time) = DATE(ra.acctstarttime)
+                    AND s.start_time >= ra.acctstarttime - INTERVAL '1 minute'
+                    AND s.start_time <= ra.acctstarttime + INTERVAL '1 minute'
                 WHERE ra.acctstoptime IS NULL
                 AND (ra.acctterminatecause IS NULL OR ra.acctterminatecause NOT LIKE '%PENDING%')
-                ORDER BY ra.acctstarttime DESC
+                ORDER BY ra.acctsessionid, ra.acctstarttime DESC
             """)
         ).fetchall()
         

@@ -224,7 +224,7 @@ async def get_sessions(
     # Try to get RADIUS sessions (may fail if radacct table doesn't exist)
     try:
         radius_query = """
-            SELECT 
+            SELECT DISTINCT ON (ra.radacctid)
                 ra.radacctid as session_id,
                 u.id as user_id,
                 u.name as user_name,
@@ -250,10 +250,11 @@ async def get_sessions(
                 ra.acctterminatecause as disconnect_reason
             FROM radacct ra
             LEFT JOIN users u ON ra.username = u.mobile
-            LEFT JOIN sessions s ON ra.username = u.mobile 
+            LEFT JOIN sessions s ON u.id = s.user_id 
                 AND s.mac_address = ra.callingstationid 
-                AND DATE(s.start_time) = DATE(ra.acctstarttime)
-            WHERE ra.acctterminatecause IS NULL OR ra.acctterminatecause NOT LIKE '%PENDING%'
+                AND s.start_time >= ra.acctstarttime - INTERVAL '1 minute'
+                AND s.start_time <= ra.acctstarttime + INTERVAL '1 minute'
+            WHERE (ra.acctterminatecause IS NULL OR ra.acctterminatecause NOT LIKE '%PENDING%')
         """
         
         # Build RADIUS filter conditions
@@ -293,7 +294,8 @@ async def get_sessions(
         if radius_conditions:
             radius_query += " AND " + " AND ".join(radius_conditions)
         
-        radius_query += " ORDER BY ra.acctstarttime DESC"
+        # Wrap in subquery to allow proper sorting after DISTINCT ON
+        radius_query = f"SELECT * FROM ({radius_query} ORDER BY ra.radacctid, ra.acctstarttime DESC) sub ORDER BY start_time DESC"
         
         radius_sessions = db.execute(text(radius_query), radius_params).fetchall()
         
