@@ -161,59 +161,65 @@ async def get_radius_settings(
     db: Session = Depends(get_db)
 ):
     """Get RADIUS settings from database"""
-    from ..models.radius_settings import RadiusSettings
-    
-    # Get or create settings
-    settings = db.query(RadiusSettings).first()
-    
-    if not settings:
-        # Create default settings
-        settings = RadiusSettings(
-            default_session_timeout=3600,
-            max_session_timeout=86400,
-            default_bandwidth_down=0,
-            default_bandwidth_up=0,
-            max_concurrent_sessions=1,
-            idle_timeout=600,
-            daily_data_limit=0,
-            monthly_data_limit=0,
-            allow_multiple_devices=False
-        )
-        db.add(settings)
-        db.commit()
-        db.refresh(settings)
-    
-    return {
-        "success": True,
-        "settings": {
-            "default_session_timeout": settings.default_session_timeout,
-            "max_session_timeout": settings.max_session_timeout,
-            "default_bandwidth_down": settings.default_bandwidth_down,
-            "default_bandwidth_up": settings.default_bandwidth_up,
-            "max_concurrent_sessions": settings.max_concurrent_sessions,
-            "idle_timeout": settings.idle_timeout,
-            "daily_data_limit": settings.daily_data_limit,
-            "monthly_data_limit": settings.monthly_data_limit,
-            "allow_multiple_devices": settings.allow_multiple_devices,
-            "timeout_options": [
-                {"value": 1800, "label": "30 minutes"},
-                {"value": 3600, "label": "1 hour"},
-                {"value": 7200, "label": "2 hours"},
-                {"value": 14400, "label": "4 hours"},
-                {"value": 28800, "label": "8 hours"},
-                {"value": 43200, "label": "12 hours"},
-                {"value": 86400, "label": "24 hours"}
-            ],
-            "bandwidth_options": [
-                {"value": 0, "label": "Unlimited"},
-                {"value": 512, "label": "512 Kbps"},
-                {"value": 1024, "label": "1 Mbps"},
-                {"value": 2048, "label": "2 Mbps"},
-                {"value": 5120, "label": "5 Mbps"},
-                {"value": 10240, "label": "10 Mbps"}
-            ]
+    try:
+        from ..models.radius_settings import RadiusSettings
+        
+        # Get or create settings
+        settings = db.query(RadiusSettings).first()
+        
+        if not settings:
+            # Create default settings
+            settings = RadiusSettings(
+                default_session_timeout=3600,
+                max_session_timeout=86400,
+                default_bandwidth_down=0,
+                default_bandwidth_up=0,
+                max_concurrent_sessions=1,
+                idle_timeout=600,
+                daily_data_limit=0,
+                monthly_data_limit=0,
+                allow_multiple_devices=False
+            )
+            db.add(settings)
+            db.commit()
+            db.refresh(settings)
+        
+        return {
+            "success": True,
+            "settings": {
+                "default_session_timeout": settings.default_session_timeout,
+                "max_session_timeout": settings.max_session_timeout,
+                "default_bandwidth_down": settings.default_bandwidth_down,
+                "default_bandwidth_up": settings.default_bandwidth_up,
+                "max_concurrent_sessions": settings.max_concurrent_sessions,
+                "idle_timeout": settings.idle_timeout,
+                "daily_data_limit": settings.daily_data_limit,
+                "monthly_data_limit": settings.monthly_data_limit,
+                "allow_multiple_devices": settings.allow_multiple_devices,
+                "timeout_options": [
+                    {"value": 1800, "label": "30 minutes"},
+                    {"value": 3600, "label": "1 hour"},
+                    {"value": 7200, "label": "2 hours"},
+                    {"value": 14400, "label": "4 hours"},
+                    {"value": 28800, "label": "8 hours"},
+                    {"value": 43200, "label": "12 hours"},
+                    {"value": 86400, "label": "24 hours"}
+                ],
+                "bandwidth_options": [
+                    {"value": 0, "label": "Unlimited"},
+                    {"value": 512, "label": "512 Kbps"},
+                    {"value": 1024, "label": "1 Mbps"},
+                    {"value": 2048, "label": "2 Mbps"},
+                    {"value": 5120, "label": "5 Mbps"},
+                    {"value": 10240, "label": "10 Mbps"}
+                ]
+            }
         }
-    }
+    except Exception as e:
+        print(f"Error in get_radius_settings: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.put("/settings")
