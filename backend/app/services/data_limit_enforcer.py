@@ -302,9 +302,8 @@ class DataLimitEnforcer:
                 print("⚠️ radclient not found - install with: sudo apt install freeradius-utils")
                 return False
             
-            # Get RADIUS shared secret from settings
-            settings = db.query(RadiusSettings).first()
-            coa_secret = settings.radius_secret if settings and settings.radius_secret else "MySecretRadius2024!"
+            # RADIUS shared secret - must match Omada CoA Password
+            coa_secret = "MySecretRadius2024!"
             
             # Build the disconnect request
             # Using here-doc style for proper attribute formatting
