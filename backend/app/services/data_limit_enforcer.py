@@ -289,8 +289,16 @@ class DataLimitEnforcer:
         try:
             import shutil
             
-            # Check if radclient is available
-            if not shutil.which('radclient'):
+            # Check if radclient is available (try common paths)
+            radclient_path = shutil.which('radclient')
+            if not radclient_path:
+                # Try common installation paths
+                for path in ['/usr/bin/radclient', '/usr/local/bin/radclient']:
+                    if shutil.which(path) or __import__('os').path.exists(path):
+                        radclient_path = path
+                        break
+            
+            if not radclient_path:
                 print("⚠️ radclient not found - install with: sudo apt install freeradius-utils")
                 return False
             
@@ -300,7 +308,7 @@ class DataLimitEnforcer:
             
             # Build the disconnect request
             # Using here-doc style for proper attribute formatting
-            disconnect_cmd = f'''radclient -x {nas_ip}:3799 disconnect {coa_secret} << EOF
+            disconnect_cmd = f'''{radclient_path} -x {nas_ip}:3799 disconnect {coa_secret} << EOF
 User-Name = "{username}"
 Acct-Session-Id = "{session_id}"
 Calling-Station-Id = "{mac_address}"
