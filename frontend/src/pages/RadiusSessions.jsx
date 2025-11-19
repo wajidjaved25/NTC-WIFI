@@ -112,9 +112,27 @@ const RadiusSessions = () => {
       render: (text) => <strong>{text}</strong>
     },
     {
+      title: 'IP Address',
+      dataIndex: 'ip_address',
+      key: 'ip_address',
+      render: (text) => text || 'N/A'
+    },
+    {
       title: 'MAC Address',
       dataIndex: 'mac_address',
       key: 'mac_address',
+      render: (text) => text || 'N/A'
+    },
+    {
+      title: 'SSID',
+      dataIndex: 'ssid',
+      key: 'ssid',
+      render: (text) => text || 'N/A'
+    },
+    {
+      title: 'AP Name',
+      dataIndex: 'ap_name',
+      key: 'ap_name',
       render: (text) => text || 'N/A'
     },
     {
@@ -143,11 +161,6 @@ const RadiusSessions = () => {
           <strong>Total: {formatBytes(record.bytes_in + record.bytes_out)}</strong>
         </div>
       )
-    },
-    {
-      title: 'NAS IP',
-      dataIndex: 'nas_ip',
-      key: 'nas_ip'
     },
     {
       title: 'Status',
@@ -232,6 +245,7 @@ const RadiusSessions = () => {
           dataSource={sessions}
           rowKey="session_id"
           loading={loading}
+          scroll={{ x: 1200 }}
           pagination={{
             pageSize: 10,
             showTotal: (total) => `Total ${total} active sessions`

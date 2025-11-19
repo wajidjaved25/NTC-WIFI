@@ -136,7 +136,13 @@ async def get_sessions(
             User.mobile.label('user_mobile'),
             User.cnic.label('user_cnic'),
             User.passport.label('user_passport'),
+            User.email.label('user_email'),
+            User.id_type.label('user_id_type'),
             WiFiSession.mac_address,
+            WiFiSession.ip_address,
+            WiFiSession.ssid,
+            WiFiSession.ap_mac,
+            WiFiSession.ap_name,
             WiFiSession.start_time,
             WiFiSession.end_time,
             WiFiSession.duration,
@@ -194,7 +200,13 @@ async def get_sessions(
                 "user_mobile": s.user_mobile,
                 "user_cnic": s.user_cnic,
                 "user_passport": s.user_passport,
+                "user_email": s.user_email,
+                "user_id_type": s.user_id_type,
                 "mac_address": s.mac_address,
+                "ip_address": s.ip_address or "",
+                "ssid": s.ssid or "",
+                "ap_mac": s.ap_mac or "",
+                "ap_name": s.ap_name or "",
                 "start_time": s.start_time.isoformat() if s.start_time else None,
                 "end_time": s.end_time.isoformat() if s.end_time else None,
                 "duration": s.duration,
@@ -219,7 +231,12 @@ async def get_sessions(
                 ra.username as user_mobile,
                 u.cnic as user_cnic,
                 u.passport as user_passport,
+                u.email as user_email,
+                u.id_type as user_id_type,
                 ra.callingstationid as mac_address,
+                ra.framedipaddress as ip_address,
+                ra.calledstationid as called_station,
+                ra.nasportid as ap_name,
                 ra.acctstarttime as start_time,
                 ra.acctstoptime as end_time,
                 ra.acctsessiontime as duration,
@@ -279,6 +296,20 @@ async def get_sessions(
         
         # Add RADIUS sessions to results
         for s in radius_sessions:
+            # Parse SSID from calledstationid (format: MAC:SSID or just MAC)
+            called_station = s.called_station or ""
+            ssid = ""
+            ap_mac = ""
+            if ":" in called_station:
+                parts = called_station.split(":")
+                if len(parts) > 6:  # Has SSID after MAC
+                    ap_mac = ":".join(parts[:6])
+                    ssid = ":".join(parts[6:])
+                else:
+                    ap_mac = called_station
+            else:
+                ap_mac = called_station
+            
             all_sessions.append({
                 "id": f"radius_{s.session_id}",
                 "source": "radius",
@@ -287,7 +318,13 @@ async def get_sessions(
                 "user_mobile": s.user_mobile,
                 "user_cnic": s.user_cnic,
                 "user_passport": s.user_passport,
+                "user_email": s.user_email,
+                "user_id_type": s.user_id_type,
                 "mac_address": s.mac_address,
+                "ip_address": str(s.ip_address) if s.ip_address else "",
+                "ssid": ssid,
+                "ap_mac": ap_mac,
+                "ap_name": s.ap_name or "",
                 "start_time": s.start_time.isoformat() if s.start_time else None,
                 "end_time": s.end_time.isoformat() if s.end_time else None,
                 "duration": s.duration,

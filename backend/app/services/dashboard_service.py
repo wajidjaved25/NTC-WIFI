@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, or_, desc
+from sqlalchemy import func, and_, or_, desc, text
 from datetime import datetime, timedelta
 from typing import Dict, List, Any
 
@@ -16,82 +16,108 @@ class DashboardService:
         """Get overview statistics for dashboard"""
         start_date = datetime.utcnow() - timedelta(days=days)
         
-        # Total users
-        total_users = db.query(func.count(User.id)).scalar()
+        # Total users (from radcheck - RADIUS users)
+        total_users = db.execute(
+            text("SELECT COUNT(DISTINCT username) FROM radcheck WHERE attribute = 'Cleartext-Password'")
+        ).scalar() or 0
         
-        # New users in period
-        new_users = db.query(func.count(User.id)).filter(
-            User.created_at >= start_date
-        ).scalar()
+        # New users in period (from users table if available, otherwise estimate from radacct)
+        try:
+            new_users = db.query(func.count(User.id)).filter(
+                User.created_at >= start_date
+            ).scalar() or 0
+        except:
+            new_users = 0
         
-        # Active users (users with sessions in period)
-        active_users = db.query(func.count(func.distinct(WiFiSession.user_id))).filter(
-            WiFiSession.start_time >= start_date
-        ).scalar()
+        # Active users (users with sessions in period from radacct)
+        active_users = db.execute(
+            text("""
+                SELECT COUNT(DISTINCT username) FROM radacct 
+                WHERE acctstarttime >= :start_date
+            """),
+            {"start_date": start_date}
+        ).scalar() or 0
         
-        # Total sessions
-        total_sessions = db.query(func.count(WiFiSession.id)).filter(
-            WiFiSession.start_time >= start_date
-        ).scalar()
+        # Total sessions from radacct
+        total_sessions = db.execute(
+            text("""
+                SELECT COUNT(*) FROM radacct 
+                WHERE acctstarttime >= :start_date
+            """),
+            {"start_date": start_date}
+        ).scalar() or 0
         
-        # Active sessions (currently connected)
-        active_sessions = db.query(func.count(WiFiSession.id)).filter(
-            WiFiSession.session_status == 'active'
-        ).scalar()
+        # Active sessions (currently connected) from radacct
+        active_sessions = db.execute(
+            text("SELECT COUNT(*) FROM radacct WHERE acctstoptime IS NULL")
+        ).scalar() or 0
         
-        # Total data usage
-        data_stats = db.query(
-            func.sum(WiFiSession.total_data).label('total'),
-            func.avg(WiFiSession.total_data).label('average')
-        ).filter(
-            WiFiSession.start_time >= start_date,
-            WiFiSession.total_data.isnot(None)
-        ).first()
+        # Total data usage from radacct
+        data_stats = db.execute(
+            text("""
+                SELECT 
+                    COALESCE(SUM(CAST(acctinputoctets AS BIGINT) + CAST(acctoutputoctets AS BIGINT)), 0) as total,
+                    COALESCE(AVG(CAST(acctinputoctets AS BIGINT) + CAST(acctoutputoctets AS BIGINT)), 0) as average
+                FROM radacct 
+                WHERE acctstarttime >= :start_date
+            """),
+            {"start_date": start_date}
+        ).fetchone()
         
-        # Total session duration
-        duration_stats = db.query(
-            func.sum(WiFiSession.duration).label('total'),
-            func.avg(WiFiSession.duration).label('average')
-        ).filter(
-            WiFiSession.start_time >= start_date,
-            WiFiSession.duration.isnot(None)
-        ).first()
+        # Total session duration from radacct
+        duration_stats = db.execute(
+            text("""
+                SELECT 
+                    COALESCE(SUM(acctsessiontime), 0) as total,
+                    COALESCE(AVG(acctsessiontime), 0) as average
+                FROM radacct 
+                WHERE acctstarttime >= :start_date
+                AND acctsessiontime IS NOT NULL
+            """),
+            {"start_date": start_date}
+        ).fetchone()
         
         # Active advertisements
         active_ads = db.query(func.count(Advertisement.id)).filter(
             Advertisement.is_active == True
-        ).scalar()
+        ).scalar() or 0
         
         # Blocked users
-        blocked_users = db.query(func.count(User.id)).filter(
-            User.is_blocked == True
-        ).scalar()
+        try:
+            blocked_users = db.query(func.count(User.id)).filter(
+                User.is_blocked == True
+            ).scalar() or 0
+        except:
+            blocked_users = 0
         
         # Ad impressions
-        ad_views = db.query(func.count(AdAnalytics.id)).filter(
-            AdAnalytics.event_type == 'view',
-            AdAnalytics.event_timestamp >= start_date
-        ).scalar()
+        try:
+            ad_views = db.query(func.count(AdAnalytics.id)).filter(
+                AdAnalytics.event_type == 'view',
+                AdAnalytics.event_timestamp >= start_date
+            ).scalar() or 0
+        except:
+            ad_views = 0
         
         return {
             "users": {
-                "total": total_users or 0,
-                "new": new_users or 0,
-                "active": active_users or 0,
-                "blocked": blocked_users or 0
+                "total": total_users,
+                "new": new_users,
+                "active": active_users,
+                "blocked": blocked_users
             },
             "sessions": {
-                "total": total_sessions or 0,
-                "active": active_sessions or 0,
-                "average_duration": int(duration_stats.average) if duration_stats.average else 0
+                "total": total_sessions,
+                "active": active_sessions,
+                "average_duration": int(duration_stats[1]) if duration_stats else 0
             },
             "data_usage": {
-                "total": int(data_stats.total) if data_stats.total else 0,
-                "average_per_session": int(data_stats.average) if data_stats.average else 0
+                "total": int(data_stats[0]) if data_stats else 0,
+                "average_per_session": int(data_stats[1]) if data_stats else 0
             },
             "advertisements": {
-                "active_count": active_ads or 0,
-                "total_views": ad_views or 0
+                "active_count": active_ads,
+                "total_views": ad_views
             },
             "period_days": days
         }
@@ -261,42 +287,50 @@ class DashboardService:
     
     @staticmethod
     def get_real_time_stats(db: Session) -> Dict[str, Any]:
-        """Get real-time statistics"""
-        # Currently active sessions
-        active_now = db.query(func.count(WiFiSession.id)).filter(
-            WiFiSession.session_status == 'active'
-        ).scalar()
+        """Get real-time statistics from radacct"""
+        # Currently active sessions from radacct
+        active_now = db.execute(
+            text("SELECT COUNT(*) FROM radacct WHERE acctstoptime IS NULL")
+        ).scalar() or 0
         
-        # Active sessions by AP
-        sessions_by_ap = db.query(
-            WiFiSession.ap_name,
-            func.count(WiFiSession.id).label('count')
-        ).filter(
-            WiFiSession.session_status == 'active',
-            WiFiSession.ap_name.isnot(None)
-        ).group_by(
-            WiFiSession.ap_name
-        ).all()
+        # Active sessions by AP (using calledstationid which contains AP info)
+        sessions_by_ap = db.execute(
+            text("""
+                SELECT 
+                    COALESCE(nasportid, 'Unknown') as ap_name,
+                    COUNT(*) as count
+                FROM radacct 
+                WHERE acctstoptime IS NULL
+                GROUP BY nasportid
+                ORDER BY count DESC
+            """)
+        ).fetchall()
         
-        # Sessions today
-        today = datetime.utcnow().date()
-        sessions_today = db.query(func.count(WiFiSession.id)).filter(
-            func.date(WiFiSession.start_time) == today
-        ).scalar()
+        # Sessions today from radacct
+        sessions_today = db.execute(
+            text("""
+                SELECT COUNT(*) FROM radacct 
+                WHERE DATE(acctstarttime) = CURRENT_DATE
+            """)
+        ).scalar() or 0
         
-        # Data usage today
-        data_today = db.query(func.sum(WiFiSession.total_data)).filter(
-            func.date(WiFiSession.start_time) == today
-        ).scalar()
+        # Data usage today from radacct
+        data_today = db.execute(
+            text("""
+                SELECT COALESCE(SUM(acctinputoctets + acctoutputoctets), 0)
+                FROM radacct 
+                WHERE DATE(acctstarttime) = CURRENT_DATE
+            """)
+        ).scalar() or 0
         
         return {
-            "active_sessions": active_now or 0,
+            "active_sessions": active_now,
             "sessions_by_ap": [
-                {"ap": ap.ap_name, "count": ap.count} 
+                {"ap": ap[0] or 'Unknown', "count": ap[1]} 
                 for ap in sessions_by_ap
             ],
             "today": {
-                "sessions": sessions_today or 0,
-                "data_usage": int(data_today or 0)
+                "sessions": sessions_today,
+                "data_usage": int(data_today)
             }
         }
