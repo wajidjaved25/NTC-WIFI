@@ -177,12 +177,29 @@ class DataLimitEnforcer:
         print(f"⚠️ Disconnecting {username}: {reason}")
         
         try:
-            # Method 1: Send RADIUS Disconnect-Request (CoA)
-            # This requires the NAS to support dynamic authorization
+            # Get the user's MAC address from active session
+            session_info = db.execute(
+                text("""
+                    SELECT callingstationid, nasipaddress, acctsessionid
+                    FROM radacct
+                    WHERE username = :username
+                    AND acctstoptime IS NULL
+                    ORDER BY acctstarttime DESC
+                    LIMIT 1
+                """),
+                {"username": username}
+            ).fetchone()
+            
+            mac_address = session_info[0] if session_info else None
+            
+            # Method 1: Disconnect via Omada API (most effective)
+            if mac_address:
+                await self._disconnect_via_omada(db, mac_address)
+            
+            # Method 2: Send RADIUS Disconnect-Request (CoA)
             await self._send_radius_disconnect(username)
             
-            # Method 2: Mark session as stopped in radacct
-            # This ensures the session is recorded as terminated
+            # Method 3: Mark session as stopped in radacct
             db.execute(
                 text("""
                     UPDATE radacct 
@@ -195,24 +212,50 @@ class DataLimitEnforcer:
             )
             db.commit()
             
-            # Method 3: Block the user temporarily (optional)
-            # This prevents re-authentication until limit resets
-            # Uncomment if you want to block the user entirely
-            # db.execute(
-            #     text("""
-            #         INSERT INTO radcheck (username, attribute, op, value)
-            #         VALUES (:username, 'Auth-Type', ':=', 'Reject')
-            #         ON CONFLICT DO NOTHING
-            #     """),
-            #     {"username": username}
-            # )
-            # db.commit()
-            
             print(f"✓ Disconnected {username}")
             
         except Exception as e:
             print(f"❌ Failed to disconnect {username}: {e}")
             db.rollback()
+    
+    async def _disconnect_via_omada(self, db: Session, mac_address: str):
+        """
+        Disconnect user via Omada controller API
+        """
+        try:
+            from ..models.omada_config import OmadaConfig
+            from ..services.omada_service import OmadaService
+            
+            # Get active Omada config
+            omada_config = db.query(OmadaConfig).filter(OmadaConfig.is_active == True).first()
+            
+            if not omada_config:
+                print("⚠️ No active Omada configuration found")
+                return
+            
+            # Create Omada service instance
+            omada = OmadaService(
+                controller_url=omada_config.controller_url,
+                username=omada_config.username,
+                encrypted_password=omada_config.password,
+                controller_id=omada_config.controller_id,
+                site_id=omada_config.site_id or "Default"
+            )
+            
+            # Normalize MAC address format
+            mac_clean = mac_address.replace('-', '').replace(':', '').replace('.', '').lower()
+            mac_formatted = ':'.join(mac_clean[i:i+2] for i in range(0, 12, 2))
+            
+            # Unauthorize the client
+            result = omada.unauthorize_client(mac_formatted)
+            
+            if result.get('success'):
+                print(f"✓ Omada: Unauthorized client {mac_formatted}")
+            else:
+                print(f"⚠️ Omada: {result.get('message')}")
+                
+        except Exception as e:
+            print(f"⚠️ Omada disconnect error: {e}")
     
     async def _send_radius_disconnect(self, username: str):
         """
