@@ -325,6 +325,113 @@ async def get_sessions(
         "total_pages": (total_count + page_size - 1) // page_size if total_count > 0 else 0
     }
 
+# Export records - GET endpoint for direct download
+@router.get("/export/{format}")
+async def export_records_get(
+    format: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    mobile: Optional[str] = None,
+    cnic: Optional[str] = None,
+    passport: Optional[str] = None,
+    mac_address: Optional[str] = None,
+    status: Optional[str] = None,
+    min_duration: Optional[int] = None,
+    max_duration: Optional[int] = None,
+    current_user: Admin = Depends(require_reports_permission),
+    db: Session = Depends(get_db)
+):
+    """Export records as CSV, Excel, or PDF"""
+    
+    if not has_permission(current_user, "export_records"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to export records"
+        )
+    
+    if format not in ['csv', 'excel', 'pdf']:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid export format. Use 'csv', 'excel', or 'pdf'"
+        )
+    
+    # Build query with filters
+    query = db.query(
+        WiFiSession,
+        User.name,
+        User.mobile,
+        User.cnic,
+        User.passport
+    ).outerjoin(User, WiFiSession.user_id == User.id)
+    
+    # Apply filters
+    conditions = []
+    
+    if start_date:
+        start_datetime = datetime.combine(datetime.fromisoformat(start_date).date(), datetime.min.time())
+        conditions.append(WiFiSession.start_time >= start_datetime)
+    
+    if end_date:
+        end_datetime = datetime.combine(datetime.fromisoformat(end_date).date(), datetime.max.time())
+        conditions.append(WiFiSession.start_time <= end_datetime)
+    
+    if mobile:
+        conditions.append(User.mobile.like(f"%{mobile}%"))
+    
+    if cnic:
+        conditions.append(User.cnic.like(f"%{cnic}%"))
+    
+    if passport:
+        conditions.append(User.passport.like(f"%{passport}%"))
+    
+    if mac_address:
+        conditions.append(WiFiSession.mac_address.like(f"%{mac_address}%"))
+    
+    if status:
+        conditions.append(WiFiSession.session_status == status)
+    
+    if min_duration:
+        conditions.append(WiFiSession.duration >= min_duration)
+    
+    if max_duration:
+        conditions.append(WiFiSession.duration <= max_duration)
+    
+    if conditions:
+        query = query.filter(and_(*conditions))
+    
+    # Get all matching records
+    results = query.order_by(WiFiSession.start_time.desc()).all()
+    
+    # Prepare data
+    data = []
+    for session, user_name, user_mobile, user_cnic, user_passport in results:
+        data.append({
+            "ID": session.id,
+            "User Name": user_name or "N/A",
+            "Mobile": user_mobile or "N/A",
+            "CNIC": user_cnic or "N/A",
+            "Passport": user_passport or "N/A",
+            "MAC Address": session.mac_address or "N/A",
+            "Start Time": session.start_time.strftime("%Y-%m-%d %H:%M:%S") if session.start_time else "N/A",
+            "End Time": session.end_time.strftime("%Y-%m-%d %H:%M:%S") if session.end_time else "Active",
+            "Duration (sec)": session.duration or 0,
+            "Data Upload (bytes)": session.data_upload or 0,
+            "Data Download (bytes)": session.data_download or 0,
+            "Total Data (bytes)": session.total_data or 0,
+            "Status": session.session_status or "N/A",
+            "Disconnect Reason": session.disconnect_reason or "N/A"
+        })
+    
+    # Generate export based on format
+    export_service = ExportService()
+    
+    if format == "csv":
+        return export_service.export_to_csv(data)
+    elif format == "excel":
+        return export_service.export_to_excel(data)
+    elif format == "pdf":
+        return export_service.export_to_pdf(data)
+
 # Export records
 @router.post("/export")
 async def export_records(
