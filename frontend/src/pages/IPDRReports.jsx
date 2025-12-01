@@ -12,16 +12,12 @@ import {
   Statistic,
   Row,
   Col,
-  Upload,
-  Modal,
   Tag,
-  Descriptions,
   Tooltip
 } from 'antd';
 import {
   SearchOutlined,
   DownloadOutlined,
-  UploadOutlined,
   FileTextOutlined,
   HistoryOutlined,
   DatabaseOutlined
@@ -43,14 +39,11 @@ const IPDRReports = () => {
   });
   const [searchType, setSearchType] = useState('mobile');
   const [stats, setStats] = useState(null);
-  const [importModalVisible, setImportModalVisible] = useState(false);
-  const [importJobs, setImportJobs] = useState([]);
   const [lastSearchParams, setLastSearchParams] = useState(null);
   const [syslogStatus, setSyslogStatus] = useState(null);
 
   useEffect(() => {
     fetchStats();
-    fetchImportJobs();
     fetchSyslogStatus();
     
     // Poll syslog status every 30 seconds
@@ -64,15 +57,6 @@ const IPDRReports = () => {
       setStats(response.data);
     } catch (error) {
       console.error('Error fetching IPDR stats:', error);
-    }
-  };
-
-  const fetchImportJobs = async () => {
-    try {
-      const response = await ipdrAPI.getImportJobs(10);
-      setImportJobs(response.data);
-    } catch (error) {
-      console.error('Error fetching import jobs:', error);
     }
   };
 
@@ -191,27 +175,6 @@ const IPDRReports = () => {
       message.error('Failed to export report');
       console.error('Export error:', error);
     }
-  };
-
-  const handleCSVImport = async (file) => {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-      setLoading(true);
-      const response = await ipdrAPI.importCSV(formData);
-      message.success(`Import started: ${response.data.filename}`);
-      setImportModalVisible(false);
-      fetchImportJobs();
-      fetchStats();
-    } catch (error) {
-      message.error('Failed to import CSV');
-      console.error('Import error:', error);
-    } finally {
-      setLoading(false);
-    }
-
-    return false; // Prevent default upload behavior
   };
 
   const renderSearchFields = () => {
@@ -539,22 +502,14 @@ const IPDRReports = () => {
       <Card
         title="IPDR Search"
         extra={
-          <Space>
-            <Button
-              icon={<UploadOutlined />}
-              onClick={() => setImportModalVisible(true)}
-            >
-              Import CSV
-            </Button>
-            <Button
-              type="primary"
-              icon={<DownloadOutlined />}
-              onClick={() => handleExport('csv')}
-              disabled={!searchResults.length}
-            >
-              Export CSV
-            </Button>
-          </Space>
+          <Button
+            type="primary"
+            icon={<DownloadOutlined />}
+            onClick={() => handleExport('csv')}
+            disabled={!searchResults.length}
+          >
+            Export CSV
+          </Button>
         }
         style={{ marginBottom: 24 }}
       >
@@ -607,77 +562,6 @@ const IPDRReports = () => {
           size="small"
         />
       </Card>
-
-      {/* Import Modal */}
-      <Modal
-        title="Import Firewall CSV Logs"
-        open={importModalVisible}
-        onCancel={() => setImportModalVisible(false)}
-        footer={null}
-      >
-        <Space direction="vertical" style={{ width: '100%' }} size="large">
-          <div>
-            <h4>Supported Format:</h4>
-            <ul>
-              <li>FortiGate firewall log CSV format</li>
-              <li>File must include headers</li>
-              <li>Maximum file size: 100MB</li>
-            </ul>
-          </div>
-
-          <Upload.Dragger
-            name="file"
-            accept=".csv"
-            beforeUpload={handleCSVImport}
-            showUploadList={false}
-          >
-            <p className="ant-upload-drag-icon">
-              <UploadOutlined />
-            </p>
-            <p className="ant-upload-text">
-              Click or drag CSV file to this area to upload
-            </p>
-            <p className="ant-upload-hint">
-              Support for FortiGate log CSV format
-            </p>
-          </Upload.Dragger>
-
-          {importJobs.length > 0 && (
-            <div>
-              <h4>Recent Import Jobs:</h4>
-              {importJobs.slice(0, 5).map((job) => (
-                <Descriptions key={job.id} bordered size="small" column={1}>
-                  <Descriptions.Item label="File">
-                    {job.filename}
-                  </Descriptions.Item>
-                  <Descriptions.Item label="Status">
-                    <Tag
-                      color={
-                        job.status === 'completed'
-                          ? 'success'
-                          : job.status === 'failed'
-                          ? 'error'
-                          : 'processing'
-                      }
-                    >
-                      {job.status.toUpperCase()}
-                    </Tag>
-                  </Descriptions.Item>
-                  <Descriptions.Item label="Progress">
-                    {job.imported_rows} / {job.total_rows || 0} rows imported
-                    {job.failed_rows > 0 && ` (${job.failed_rows} failed)`}
-                  </Descriptions.Item>
-                  <Descriptions.Item label="Time">
-                    {job.started_at
-                      ? dayjs(job.started_at).format('YYYY-MM-DD HH:mm:ss')
-                      : 'N/A'}
-                  </Descriptions.Item>
-                </Descriptions>
-              ))}
-            </div>
-          )}
-        </Space>
-      </Modal>
     </div>
   );
 };

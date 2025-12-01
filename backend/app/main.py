@@ -16,7 +16,7 @@ from .models import (
 )
 
 # Import routes
-from .routes import auth, omada, records, ads, portal, dashboard, public, radius_admin, ipdr
+from .routes import auth, omada, records, ads, portal, dashboard, public, radius_admin, ipdr, user_management, admin_management
 
 # Create FastAPI app
 app = FastAPI(
@@ -55,6 +55,8 @@ app.include_router(portal.router, prefix="/api")
 app.include_router(public.router, prefix="/api")  # Public API for portal
 app.include_router(radius_admin.router, prefix="/api")  # RADIUS admin routes
 app.include_router(ipdr.router, prefix="/api")  # IPDR reports
+app.include_router(user_management.router, prefix="/api")  # WiFi user management
+app.include_router(admin_management.router, prefix="/api")  # Admin user management
 
 @app.on_event("startup")
 async def startup_event():
