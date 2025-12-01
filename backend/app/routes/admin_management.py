@@ -69,12 +69,12 @@ class AdminListResponse(BaseModel):
     admins: List[AdminResponse]
 
 
-# Middleware - Only superadmin can manage admins
-def require_superadmin(current_user: Admin = Depends(get_current_user)):
-    if current_user.role != 'superadmin':
+# Middleware - Admin or Superadmin can manage admins
+def require_admin_or_superadmin(current_user: Admin = Depends(get_current_user)):
+    if current_user.role not in ['superadmin', 'admin']:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only superadmin can manage admin accounts"
+            detail="Only superadmin or admin can manage admin accounts"
         )
     return current_user
 
@@ -86,7 +86,7 @@ async def list_admins(
     search: Optional[str] = None,
     role: Optional[str] = None,
     is_active: Optional[bool] = None,
-    current_user: Admin = Depends(require_superadmin),
+    current_user: Admin = Depends(require_admin_or_superadmin),
     db: Session = Depends(get_db)
 ):
     """Get list of admin users"""
@@ -129,7 +129,7 @@ async def list_admins(
 @router.get("/admins/{admin_id}", response_model=AdminResponse)
 async def get_admin(
     admin_id: int,
-    current_user: Admin = Depends(require_superadmin),
+    current_user: Admin = Depends(require_admin_or_superadmin),
     db: Session = Depends(get_db)
 ):
     """Get single admin details"""
@@ -147,10 +147,17 @@ async def get_admin(
 @router.post("/admins", response_model=AdminResponse)
 async def create_admin(
     admin_data: AdminCreate,
-    current_user: Admin = Depends(require_superadmin),
+    current_user: Admin = Depends(require_admin_or_superadmin),
     db: Session = Depends(get_db)
 ):
     """Create a new admin user"""
+    
+    # Regular admin can only create IPDR viewers, not other admins
+    if current_user.role == 'admin' and admin_data.role != 'ipdr_viewer':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin users can only create IPDR viewer accounts"
+        )
     
     # Check if username already exists
     existing_admin = db.query(Admin).filter(Admin.username == admin_data.username).first()
@@ -212,7 +219,7 @@ async def create_admin(
 async def update_admin(
     admin_id: int,
     admin_data: AdminUpdate,
-    current_user: Admin = Depends(require_superadmin),
+    current_user: Admin = Depends(require_admin_or_superadmin),
     db: Session = Depends(get_db)
 ):
     """Update admin information"""
@@ -229,6 +236,13 @@ async def update_admin(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot modify superadmin account"
+        )
+    
+    # Regular admin cannot modify other admin accounts, only IPDR viewers
+    if current_user.role == 'admin' and admin.role != 'ipdr_viewer':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin users can only modify IPDR viewer accounts"
         )
     
     # Update fields if provided
@@ -273,7 +287,7 @@ async def update_admin(
 async def update_admin_password(
     admin_id: int,
     password_data: AdminPasswordUpdate,
-    current_user: Admin = Depends(require_superadmin),
+    current_user: Admin = Depends(require_admin_or_superadmin),
     db: Session = Depends(get_db)
 ):
     """Update admin password"""
@@ -285,11 +299,18 @@ async def update_admin_password(
             detail="Admin not found"
         )
     
-    # Cannot modify superadmin password
+    # Cannot modify superadmin password unless you are that superadmin
     if admin.role == 'superadmin' and admin.id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot modify another superadmin's password"
+        )
+    
+    # Regular admin cannot modify other admin accounts, only IPDR viewers
+    if current_user.role == 'admin' and admin.role != 'ipdr_viewer':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin users can only modify IPDR viewer accounts"
         )
     
     # Hash new password
@@ -306,7 +327,7 @@ async def update_admin_password(
 @router.post("/admins/{admin_id}/activate")
 async def activate_admin(
     admin_id: int,
-    current_user: Admin = Depends(require_superadmin),
+    current_user: Admin = Depends(require_admin_or_superadmin),
     db: Session = Depends(get_db)
 ):
     """Activate an admin account"""
@@ -322,6 +343,13 @@ async def activate_admin(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot deactivate superadmin"
+        )
+    
+    # Regular admin cannot modify other admin accounts, only IPDR viewers
+    if current_user.role == 'admin' and admin.role != 'ipdr_viewer':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin users can only modify IPDR viewer accounts"
         )
     
     if admin.is_active:
@@ -342,7 +370,7 @@ async def activate_admin(
 @router.post("/admins/{admin_id}/deactivate")
 async def deactivate_admin(
     admin_id: int,
-    current_user: Admin = Depends(require_superadmin),
+    current_user: Admin = Depends(require_admin_or_superadmin),
     db: Session = Depends(get_db)
 ):
     """Deactivate an admin account"""
@@ -358,6 +386,13 @@ async def deactivate_admin(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot deactivate superadmin"
+        )
+    
+    # Regular admin cannot modify other admin accounts, only IPDR viewers
+    if current_user.role == 'admin' and admin.role != 'ipdr_viewer':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin users can only modify IPDR viewer accounts"
         )
     
     if not admin.is_active:
@@ -378,7 +413,7 @@ async def deactivate_admin(
 @router.delete("/admins/{admin_id}")
 async def delete_admin(
     admin_id: int,
-    current_user: Admin = Depends(require_superadmin),
+    current_user: Admin = Depends(require_admin_or_superadmin),
     db: Session = Depends(get_db)
 ):
     """Delete an admin account"""
@@ -395,6 +430,13 @@ async def delete_admin(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot delete superadmin account"
+        )
+    
+    # Regular admin cannot delete other admin accounts, only IPDR viewers
+    if current_user.role == 'admin' and admin.role != 'ipdr_viewer':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin users can only delete IPDR viewer accounts"
         )
     
     # Cannot delete self
@@ -415,24 +457,44 @@ async def delete_admin(
 
 @router.get("/roles")
 async def get_roles(
-    current_user: Admin = Depends(require_superadmin)
+    current_user: Admin = Depends(require_admin_or_superadmin)
 ):
     """Get available admin roles and their permissions"""
     
+    # Superadmin can see all roles
+    if current_user.role == 'superadmin':
+        return {
+            "roles": [
+                {
+                    "value": "admin",
+                    "label": "Administrator",
+                    "description": "Full system access including user management, portal settings, and IPDR",
+                    "default_permissions": {
+                        "can_manage_portal": True,
+                        "can_manage_sessions": True,
+                        "can_view_records": True,
+                        "can_view_ipdr": True,
+                        "can_manage_radius": True
+                    }
+                },
+                {
+                    "value": "ipdr_viewer",
+                    "label": "IPDR Viewer",
+                    "description": "Limited access to view IPDR reports only",
+                    "default_permissions": {
+                        "can_manage_portal": False,
+                        "can_manage_sessions": False,
+                        "can_view_records": True,
+                        "can_view_ipdr": True,
+                        "can_manage_radius": False
+                    }
+                }
+            ]
+        }
+    
+    # Regular admin can only see IPDR viewer role
     return {
         "roles": [
-            {
-                "value": "admin",
-                "label": "Administrator",
-                "description": "Full system access including user management, portal settings, and IPDR",
-                "default_permissions": {
-                    "can_manage_portal": True,
-                    "can_manage_sessions": True,
-                    "can_view_records": True,
-                    "can_view_ipdr": True,
-                    "can_manage_radius": True
-                }
-            },
             {
                 "value": "ipdr_viewer",
                 "label": "IPDR Viewer",

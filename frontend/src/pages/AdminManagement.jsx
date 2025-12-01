@@ -51,6 +51,9 @@ const AdminManagement = () => {
   const [form] = Form.useForm();
   const [editForm] = Form.useForm();
   const [passwordForm] = Form.useForm();
+  
+  // Get current user from localStorage
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
 
   useEffect(() => {
     fetchAdmins();
@@ -250,6 +253,12 @@ const AdminManagement = () => {
         if (record.role === 'superadmin') {
           return <Tag color="red">Protected</Tag>;
         }
+        
+        // Regular admin can only manage IPDR viewers
+        if (currentUser.role === 'admin' && record.role !== 'ipdr_viewer') {
+          return <Tag color="orange">No Permission</Tag>;
+        }
+        
         return (
           <Space>
             <Button
@@ -306,9 +315,13 @@ const AdminManagement = () => {
       <h2><TeamOutlined /> Admin User Management</h2>
 
       <Alert
-        message="Superadmin Access Only"
-        description="Only superadmin accounts can manage admin users. Superadmin accounts cannot be modified or deleted."
-        type="warning"
+        message={currentUser?.role === 'superadmin' ? "Superadmin Access" : "Admin Access - Limited"}
+        description={
+          currentUser?.role === 'superadmin' 
+            ? "Superadmin accounts can create both admin users and IPDR viewers. Admin accounts cannot be modified or deleted."
+            : "Admin accounts can only create and manage IPDR viewer accounts (sub-users). Cannot create or modify other admin accounts."
+        }
+        type={currentUser?.role === 'superadmin' ? "info" : "warning"}
         showIcon
         style={{ marginBottom: 16 }}
       />

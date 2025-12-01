@@ -99,8 +99,8 @@ function MainLayout({ children, user, onLogout }) {
       })
     }
 
-    // Admin Management - superadmin only
-    if (user.role === 'superadmin') {
+    // Admin Management - superadmin & admin only
+    if (['superadmin', 'admin'].includes(user.role)) {
       items.push({
         key: '/admin-management',
         icon: <TeamOutlined />,

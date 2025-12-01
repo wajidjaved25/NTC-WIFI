@@ -158,7 +158,7 @@ function App() {
       <Route 
         path="/admin-management" 
         element={
-          user && user.role === 'superadmin' ? (
+          user && ['superadmin', 'admin'].includes(user.role) ? (
             <MainLayout user={user} onLogout={handleLogout}>
               <AdminManagement />
             </MainLayout>
