@@ -6,6 +6,7 @@ import {
   PictureOutlined,
   SkinOutlined,
   TeamOutlined,
+  UserOutlined,
   LogoutOutlined,
   WifiOutlined,
   DatabaseOutlined,
@@ -80,12 +81,21 @@ function MainLayout({ children, user, onLogout }) {
       })
     }
 
-    // IPDR Reports - superadmin & admin only
-    if (['superadmin', 'admin'].includes(user.role)) {
+    // IPDR Reports - superadmin, admin, and ipdr_viewer
+    if (['superadmin', 'admin', 'ipdr_viewer'].includes(user.role)) {
       items.push({
         key: '/ipdr-reports',
         icon: <DatabaseOutlined />,
         label: 'IPDR Reports',
+      })
+    }
+
+    // User Management - superadmin & admin only
+    if (['superadmin', 'admin'].includes(user.role)) {
+      items.push({
+        key: '/user-management',
+        icon: <UserOutlined />,
+        label: 'User Management',
       })
     }
 
@@ -134,6 +144,7 @@ function MainLayout({ children, user, onLogout }) {
               {location.pathname === '/radius-sessions' && 'Active RADIUS Sessions'}
               {location.pathname === '/radius-settings' && 'RADIUS Server Settings'}
               {location.pathname === '/ipdr-reports' && 'IPDR Reports'}
+              {location.pathname === '/user-management' && 'WiFi User Management'}
               {location.pathname === '/admin-management' && 'Admin Management'}
             </div>
             <div className="header-user">

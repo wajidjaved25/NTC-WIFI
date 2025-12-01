@@ -9,6 +9,7 @@ import Records from './pages/Records'
 import Advertisements from './pages/Advertisements'
 import PortalDesign from './pages/PortalDesign'
 import AdminManagement from './pages/AdminManagement'
+import UserManagement from './pages/UserManagement'
 import RadiusSessions from './pages/RadiusSessions'
 import RadiusSettings from './pages/RadiusSettings'
 import IPDRReports from './pages/IPDRReports'
@@ -168,6 +169,19 @@ function App() {
       />
 
       <Route 
+        path="/user-management" 
+        element={
+          user && ['superadmin', 'admin'].includes(user.role) ? (
+            <MainLayout user={user} onLogout={handleLogout}>
+              <UserManagement />
+            </MainLayout>
+          ) : (
+            <Navigate to="/dashboard" />
+          )
+        } 
+      />
+
+      <Route 
         path="/radius-sessions" 
         element={
           user && ['superadmin', 'admin'].includes(user.role) ? (
@@ -196,7 +210,7 @@ function App() {
       <Route 
         path="/ipdr-reports" 
         element={
-          user && ['superadmin', 'admin'].includes(user.role) ? (
+          user && ['superadmin', 'admin', 'ipdr_viewer'].includes(user.role) ? (
             <MainLayout user={user} onLogout={handleLogout}>
               <IPDRReports />
             </MainLayout>
