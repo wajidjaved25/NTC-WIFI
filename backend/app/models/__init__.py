@@ -14,6 +14,7 @@ from .daily_usage import DailyUsage
 from .system_log import SystemLog
 from .otp import OTP
 from .radius_settings import RadiusSettings
+from .ipdr import FirewallLog, FirewallImportJob, IPDRSearchHistory
 
 __all__ = [
     "Admin",
@@ -27,5 +28,8 @@ __all__ = [
     "DailyUsage",
     "SystemLog",
     "OTP",
-    "RadiusSettings"
+    "RadiusSettings",
+    "FirewallLog",
+    "FirewallImportJob",
+    "IPDRSearchHistory"
 ]

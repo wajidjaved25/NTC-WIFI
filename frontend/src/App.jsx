@@ -11,6 +11,7 @@ import PortalDesign from './pages/PortalDesign'
 import AdminManagement from './pages/AdminManagement'
 import RadiusSessions from './pages/RadiusSessions'
 import RadiusSettings from './pages/RadiusSettings'
+import IPDRReports from './pages/IPDRReports'
 import { authAPI } from './services/api'
 import './App.css'
 
@@ -185,6 +186,19 @@ function App() {
           user && ['superadmin', 'admin'].includes(user.role) ? (
             <MainLayout user={user} onLogout={handleLogout}>
               <RadiusSettings />
+            </MainLayout>
+          ) : (
+            <Navigate to="/dashboard" />
+          )
+        } 
+      />
+
+      <Route 
+        path="/ipdr-reports" 
+        element={
+          user && ['superadmin', 'admin'].includes(user.role) ? (
+            <MainLayout user={user} onLogout={handleLogout}>
+              <IPDRReports />
             </MainLayout>
           ) : (
             <Navigate to="/dashboard" />

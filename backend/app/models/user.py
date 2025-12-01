@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, BigInteger, Text
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
 
@@ -20,3 +21,6 @@ class User(Base):
     last_login = Column(DateTime(timezone=True), nullable=True)
     total_sessions = Column(Integer, default=0)
     total_data_usage = Column(BigInteger, default=0)
+    
+    # Relationships
+    firewall_logs = relationship("FirewallLog", back_populates="user")

@@ -11,11 +11,11 @@ from .services.data_limit_enforcer import data_limit_enforcer
 from .models import (
     Admin, User, PortalDesign, PortalSettings,
     Advertisement, AdAnalytics, Session, OmadaConfig,
-    DailyUsage, SystemLog, OTP
+    DailyUsage, SystemLog, OTP, FirewallLog, FirewallImportJob, IPDRSearchHistory
 )
 
 # Import routes
-from .routes import auth, omada, records, ads, portal, dashboard, public, radius_admin
+from .routes import auth, omada, records, ads, portal, dashboard, public, radius_admin, ipdr
 
 # Create FastAPI app
 app = FastAPI(
@@ -53,6 +53,7 @@ app.include_router(ads.router, prefix="/api")
 app.include_router(portal.router, prefix="/api")
 app.include_router(public.router, prefix="/api")  # Public API for portal
 app.include_router(radius_admin.router, prefix="/api")  # RADIUS admin routes
+app.include_router(ipdr.router, prefix="/api")  # IPDR reports
 
 @app.on_event("startup")
 async def startup_event():

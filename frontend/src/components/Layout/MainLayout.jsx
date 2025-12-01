@@ -8,6 +8,7 @@ import {
   TeamOutlined,
   LogoutOutlined,
   WifiOutlined,
+  DatabaseOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useLocation } from 'react-router-dom'
 import './MainLayout.css'
@@ -79,6 +80,15 @@ function MainLayout({ children, user, onLogout }) {
       })
     }
 
+    // IPDR Reports - superadmin & admin only
+    if (['superadmin', 'admin'].includes(user.role)) {
+      items.push({
+        key: '/ipdr-reports',
+        icon: <DatabaseOutlined />,
+        label: 'IPDR Reports',
+      })
+    }
+
     // Admin Management - superadmin only
     if (user.role === 'superadmin') {
       items.push({
@@ -123,6 +133,7 @@ function MainLayout({ children, user, onLogout }) {
               {location.pathname === '/portal-design' && 'Portal Design'}
               {location.pathname === '/radius-sessions' && 'Active RADIUS Sessions'}
               {location.pathname === '/radius-settings' && 'RADIUS Server Settings'}
+              {location.pathname === '/ipdr-reports' && 'IPDR Reports'}
               {location.pathname === '/admin-management' && 'Admin Management'}
             </div>
             <div className="header-user">

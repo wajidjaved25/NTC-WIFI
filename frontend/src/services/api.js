@@ -179,4 +179,22 @@ export const radiusAPI = {
     api.put('/radius/settings', settings),
 };
 
+// IPDR APIs
+export const ipdrAPI = {
+  searchRecords: (searchParams) => 
+    api.post('/ipdr/search', searchParams),
+  importCSV: (formData) => 
+    api.post('/ipdr/import/csv', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    }),
+  getImportJobs: (limit = 50) => 
+    api.get(`/ipdr/import/jobs?limit=${limit}`),
+  exportRecords: (exportRequest) => 
+    api.post('/ipdr/export', exportRequest, {
+      responseType: 'blob'
+    }),
+  getStats: () => 
+    api.get('/ipdr/stats'),
+};
+
 export default api;
