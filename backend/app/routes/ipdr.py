@@ -250,3 +250,43 @@ async def get_ipdr_stats(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error fetching IPDR stats: {str(e)}"
         )
+
+
+@router.get("/syslog/status")
+async def get_syslog_status(
+    current_user: Admin = Depends(require_ipdr_permission)
+):
+    """Get FortiGate syslog receiver status"""
+    from ..services.fortigate_syslog_receiver import syslog_receiver
+    
+    return {
+        "running": syslog_receiver.running,
+        "host": syslog_receiver.host,
+        "port": syslog_receiver.port,
+        "protocol": syslog_receiver.protocol,
+        "status": "active" if syslog_receiver.running else "stopped"
+    }
+
+
+@router.post("/syslog/restart")
+async def restart_syslog_receiver(
+    current_user: Admin = Depends(require_ipdr_permission)
+):
+    """Restart the syslog receiver"""
+    from ..services.fortigate_syslog_receiver import syslog_receiver
+    
+    try:
+        syslog_receiver.stop()
+        import time
+        time.sleep(1)
+        syslog_receiver.start()
+        
+        return {
+            "message": "Syslog receiver restarted successfully",
+            "status": "running"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error restarting syslog receiver: {str(e)}"
+        )

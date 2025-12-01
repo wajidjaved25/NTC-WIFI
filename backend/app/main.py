@@ -6,6 +6,7 @@ import os
 from .config import settings
 from .database import engine, Base
 from .services.data_limit_enforcer import data_limit_enforcer
+from .services.fortigate_syslog_receiver import syslog_receiver
 
 # Import all models (required for SQLAlchemy to create tables)
 from .models import (
@@ -66,12 +67,25 @@ async def startup_event():
     
     # Start data limit enforcement
     await data_limit_enforcer.start()
+    
+    # Start FortiGate syslog receiver
+    try:
+        syslog_receiver.start()
+        print(f"🔥 FortiGate Syslog Receiver: Started on port {syslog_receiver.port}")
+    except Exception as e:
+        print(f"⚠️  FortiGate Syslog Receiver: Failed to start - {e}")
+        print(f"    Note: Port 514 requires root/admin privileges")
+        print(f"    Consider using port 5140 instead")
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown"""
     # Stop data limit enforcer
     await data_limit_enforcer.stop()
+    
+    # Stop syslog receiver
+    syslog_receiver.stop()
+    
     print(f"🛑 {settings.APP_NAME} Shutting Down...")
 
 @app.get("/")

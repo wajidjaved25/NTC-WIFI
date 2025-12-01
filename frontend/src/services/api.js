@@ -195,6 +195,10 @@ export const ipdrAPI = {
     }),
   getStats: () => 
     api.get('/ipdr/stats'),
+  getSyslogStatus: () => 
+    api.get('/ipdr/syslog/status'),
+  restartSyslog: () => 
+    api.post('/ipdr/syslog/restart'),
 };
 
 export default api;

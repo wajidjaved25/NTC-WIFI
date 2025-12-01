@@ -46,10 +46,16 @@ const IPDRReports = () => {
   const [importModalVisible, setImportModalVisible] = useState(false);
   const [importJobs, setImportJobs] = useState([]);
   const [lastSearchParams, setLastSearchParams] = useState(null);
+  const [syslogStatus, setSyslogStatus] = useState(null);
 
   useEffect(() => {
     fetchStats();
     fetchImportJobs();
+    fetchSyslogStatus();
+    
+    // Poll syslog status every 30 seconds
+    const interval = setInterval(fetchSyslogStatus, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const fetchStats = async () => {
@@ -67,6 +73,26 @@ const IPDRReports = () => {
       setImportJobs(response.data);
     } catch (error) {
       console.error('Error fetching import jobs:', error);
+    }
+  };
+
+  const fetchSyslogStatus = async () => {
+    try {
+      const response = await ipdrAPI.getSyslogStatus();
+      setSyslogStatus(response.data);
+    } catch (error) {
+      console.error('Error fetching syslog status:', error);
+    }
+  };
+
+  const handleRestartSyslog = async () => {
+    try {
+      await ipdrAPI.restartSyslog();
+      message.success('Syslog receiver restarted successfully');
+      fetchSyslogStatus();
+    } catch (error) {
+      message.error('Failed to restart syslog receiver');
+      console.error('Restart error:', error);
     }
   };
 
@@ -414,6 +440,54 @@ const IPDRReports = () => {
             </Card>
           </Col>
         </Row>
+      )}
+
+      {/* Syslog Status Card */}
+      {syslogStatus && (
+        <Card
+          title="FortiGate Syslog Receiver Status"
+          extra={
+            <Button
+              size="small"
+              onClick={handleRestartSyslog}
+              icon={<HistoryOutlined />}
+            >
+              Restart
+            </Button>
+          }
+          style={{ marginBottom: 24 }}
+        >
+          <Row gutter={16}>
+            <Col span={6}>
+              <Statistic
+                title="Status"
+                value={syslogStatus.status}
+                valueStyle={{
+                  color: syslogStatus.running ? '#3f8600' : '#cf1322',
+                }}
+              />
+            </Col>
+            <Col span={6}>
+              <Statistic title="Protocol" value={syslogStatus.protocol.toUpperCase()} />
+            </Col>
+            <Col span={6}>
+              <Statistic title="Port" value={syslogStatus.port} />
+            </Col>
+            <Col span={6}>
+              <Statistic
+                title="Listen Address"
+                value={syslogStatus.host === '0.0.0.0' ? 'All Interfaces' : syslogStatus.host}
+              />
+            </Col>
+          </Row>
+          <div style={{ marginTop: 16 }}>
+            {syslogStatus.running ? (
+              <Tag color="success">Real-time log collection ACTIVE</Tag>
+            ) : (
+              <Tag color="error">Real-time log collection STOPPED</Tag>
+            )}
+          </div>
+        </Card>
       )}
 
       {/* Search Form */}
