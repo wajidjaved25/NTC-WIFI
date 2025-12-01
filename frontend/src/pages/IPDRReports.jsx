@@ -287,38 +287,42 @@ const IPDRReports = () => {
 
   const columns = [
     {
-      title: 'User Info',
+      title: 'User Information',
       key: 'user',
+      width: 200,
       render: (_, record) => (
         <Space direction="vertical" size="small">
-          <strong>{record.full_name || 'N/A'}</strong>
-          <div>{record.mobile || 'N/A'}</div>
+          <div><strong>{record.full_name || 'N/A'}</strong></div>
+          <div style={{ fontSize: '12px' }}>
+            <strong>Mobile:</strong> {record.mobile || 'N/A'}
+          </div>
           <div style={{ fontSize: '12px', color: '#666' }}>
-            {record.cnic || record.passport || 'No ID'}
+            <strong>ID:</strong> {record.cnic || record.passport || 'N/A'}
           </div>
         </Space>
       ),
     },
     {
-      title: 'Session Time',
+      title: 'Session Times',
       key: 'session',
+      width: 180,
       render: (_, record) => (
         <Space direction="vertical" size="small">
-          <div>
-            <strong>Login:</strong>{' '}
+          <div style={{ fontSize: '12px' }}>
+            <strong>Login:</strong><br/>
             {record.login_time
               ? dayjs(record.login_time).format('YYYY-MM-DD HH:mm:ss')
               : 'N/A'}
           </div>
-          <div>
-            <strong>Logout:</strong>{' '}
+          <div style={{ fontSize: '12px' }}>
+            <strong>Logout:</strong><br/>
             {record.logout_time
               ? dayjs(record.logout_time).format('YYYY-MM-DD HH:mm:ss')
               : 'Active'}
           </div>
           {record.session_duration && (
-            <Tag color="blue">
-              Duration: {Math.floor(record.session_duration / 60)}m{' '}
+            <Tag color="blue" style={{ fontSize: '11px' }}>
+              {Math.floor(record.session_duration / 60)}m{' '}
               {record.session_duration % 60}s
             </Tag>
           )}
@@ -326,21 +330,39 @@ const IPDRReports = () => {
       ),
     },
     {
-      title: 'Network Info',
-      key: 'network',
+      title: 'Source Information',
+      key: 'source',
+      width: 180,
       render: (_, record) => (
         <Space direction="vertical" size="small">
-          <div>
-            <strong>MAC:</strong> {record.mac_address || 'N/A'}
+          <div style={{ fontSize: '12px' }}>
+            <strong>MAC:</strong><br/>
+            {record.mac_address || 'N/A'}
           </div>
-          <div>
-            <strong>Source IP:</strong> {record.source_ip}:{record.source_port}
+          <div style={{ fontSize: '12px' }}>
+            <strong>IP:</strong> {record.source_ip}<br/>
+            <strong>Port:</strong> {record.source_port}
           </div>
-          {record.translated_ip && (
-            <div>
-              <strong>NAT IP:</strong> {record.translated_ip}:
-              {record.translated_port}
-            </div>
+        </Space>
+      ),
+    },
+    {
+      title: 'NAT Translation',
+      key: 'nat',
+      width: 150,
+      render: (_, record) => (
+        <Space direction="vertical" size="small">
+          {record.translated_ip ? (
+            <>
+              <div style={{ fontSize: '12px' }}>
+                <strong>IP:</strong> {record.translated_ip}
+              </div>
+              <div style={{ fontSize: '12px' }}>
+                <strong>Port:</strong> {record.translated_port || 'N/A'}
+              </div>
+            </>
+          ) : (
+            <div style={{ fontSize: '12px', color: '#999' }}>No NAT</div>
           )}
         </Space>
       ),
@@ -348,22 +370,26 @@ const IPDRReports = () => {
     {
       title: 'Destination',
       key: 'destination',
+      width: 180,
       render: (_, record) => (
         <Space direction="vertical" size="small">
-          <div>
-            <strong>IP:</strong> {record.destination_ip}:{record.destination_port}
+          <div style={{ fontSize: '12px' }}>
+            <strong>IP:</strong> {record.destination_ip}<br/>
+            <strong>Port:</strong> {record.destination_port}
           </div>
           {record.url && (
             <Tooltip title={record.url}>
               <div
                 style={{
-                  maxWidth: '200px',
+                  fontSize: '11px',
+                  maxWidth: '160px',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
+                  color: '#1890ff',
                 }}
               >
-                <strong>URL:</strong> {record.url}
+                {record.url}
               </div>
             </Tooltip>
           )}
@@ -371,30 +397,49 @@ const IPDRReports = () => {
       ),
     },
     {
-      title: 'Traffic',
-      key: 'traffic',
+      title: 'Protocol & Application',
+      key: 'protocol',
+      width: 180,
       render: (_, record) => (
         <Space direction="vertical" size="small">
-          <div>
-            <strong>Data:</strong> {(record.data_consumption / (1024 * 1024)).toFixed(2)} MB
+          <div style={{ fontSize: '12px' }}>
+            <strong>Protocol:</strong>{' '}
+            <Tag color="green" style={{ fontSize: '11px' }}>
+              {record.protocol || 'N/A'}
+            </Tag>
           </div>
-          {record.protocol && (
-            <Tag color="green">{record.protocol}</Tag>
-          )}
-          {record.service && (
-            <Tag color="blue">{record.service}</Tag>
-          )}
-          {record.app_name && (
-            <Tag color="orange">{record.app_name}</Tag>
-          )}
+          <div style={{ fontSize: '12px' }}>
+            <strong>Service:</strong>{' '}
+            <Tag color="blue" style={{ fontSize: '11px' }}>
+              {record.service || 'N/A'}
+            </Tag>
+          </div>
+          <div style={{ fontSize: '12px' }}>
+            <strong>Application:</strong>{' '}
+            <Tag color="orange" style={{ fontSize: '11px' }}>
+              {record.app_name || 'N/A'}
+            </Tag>
+          </div>
         </Space>
       ),
     },
     {
-      title: 'Timestamp',
-      dataIndex: 'log_timestamp',
-      key: 'timestamp',
-      render: (timestamp) => dayjs(timestamp).format('YYYY-MM-DD HH:mm:ss'),
+      title: 'Data Consumption',
+      key: 'data',
+      width: 140,
+      render: (_, record) => (
+        <Space direction="vertical" size="small">
+          <div style={{ fontSize: '12px' }}>
+            <strong>Total:</strong><br/>
+            {(record.data_consumption / (1024 * 1024)).toFixed(2)} MB
+          </div>
+          <div style={{ fontSize: '11px', color: '#666' }}>
+            {record.log_timestamp
+              ? dayjs(record.log_timestamp).format('HH:mm:ss')
+              : ''}
+          </div>
+        </Space>
+      ),
     },
   ];
 
@@ -558,7 +603,8 @@ const IPDRReports = () => {
           rowKey={(record) => `${record.source_ip}-${record.log_timestamp}`}
           pagination={pagination}
           onChange={handleTableChange}
-          scroll={{ x: 1200 }}
+          scroll={{ x: 1600, y: 600 }}
+          size="small"
         />
       </Card>
 

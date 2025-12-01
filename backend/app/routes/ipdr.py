@@ -164,38 +164,50 @@ async def _export_csv(records: List[IPDRRecord]) -> StreamingResponse:
     output = io.StringIO()
     writer = csv.writer(output)
     
-    # Write header
+    # Write header - All IPDR fields
     writer.writerow([
-        'Full Name', 'CNIC/Passport', 'Mobile Number',
-        'Login Time', 'Logout Time', 'Duration (seconds)',
-        'MAC Address', 'Source IP', 'Source Port',
-        'Translated IP', 'Translated Port',
-        'Destination IP', 'Destination Port',
-        'Data Consumption (bytes)', 'URL', 'Protocol',
-        'Service', 'Application', 'Timestamp'
+        'Full Name',
+        'CNIC/Passport Number',
+        'Mobile Number',
+        'Login Date & Time',
+        'Logout Date & Time',
+        'Session Duration (seconds)',
+        'MAC Address',
+        'Source IP Address',
+        'Source IP Port',
+        'Translated IP Address',
+        'Translated IP Port',
+        'Destination IP Address',
+        'Destination IP Port',
+        'Data Consumption (MB)',
+        'Internet Access Log - URL',
+        'Protocol',
+        'Service',
+        'Application Name',
+        'Log Timestamp'
     ])
     
     # Write data
     for record in records:
         writer.writerow([
-            record.full_name or '',
-            record.cnic or record.passport or '',
-            record.mobile or '',
-            record.login_time.isoformat() if record.login_time else '',
-            record.logout_time.isoformat() if record.logout_time else '',
-            record.session_duration or '',
-            record.mac_address or '',
+            record.full_name or 'N/A',
+            record.cnic or record.passport or 'N/A',
+            record.mobile or 'N/A',
+            record.login_time.isoformat() if record.login_time else 'N/A',
+            record.logout_time.isoformat() if record.logout_time else 'Active',
+            record.session_duration or 'N/A',
+            record.mac_address or 'N/A',
             record.source_ip,
             record.source_port,
-            record.translated_ip or '',
-            record.translated_port or '',
+            record.translated_ip or 'N/A',
+            record.translated_port or 'N/A',
             record.destination_ip,
             record.destination_port,
-            record.data_consumption,
-            record.url or '',
-            record.protocol or '',
-            record.service or '',
-            record.app_name or '',
+            f"{(record.data_consumption / (1024 * 1024)):.2f}",
+            record.url or 'N/A',
+            record.protocol or 'N/A',
+            record.service or 'N/A',
+            record.app_name or 'N/A',
             record.log_timestamp.isoformat()
         ])
     
