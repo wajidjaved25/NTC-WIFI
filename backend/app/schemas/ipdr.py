@@ -51,20 +51,37 @@ class FirewallLogResponse(FirewallLogBase):
 
 
 class IPDRSearchRequest(BaseModel):
-    search_type: str = Field(..., description="cnic, mobile, date_range, ip, mac")
-    
-    # User identification
-    cnic: Optional[str] = None
-    passport: Optional[str] = None
-    mobile: Optional[str] = None
-    
     # Date range
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
     
+    # User information
+    user_name: Optional[str] = None
+    cnic: Optional[str] = None
+    passport: Optional[str] = None
+    mobile: Optional[str] = None
+    
     # Network identifiers
-    ip_address: Optional[str] = None
     mac_address: Optional[str] = None
+    source_ip: Optional[str] = None
+    destination_ip: Optional[str] = None
+    translated_ip: Optional[str] = None
+    
+    # Port numbers
+    source_port: Optional[int] = None
+    destination_port: Optional[int] = None
+    
+    # Protocol and Application
+    protocol: Optional[str] = None
+    service: Optional[str] = None
+    app_name: Optional[str] = None
+    
+    # Data usage range (in bytes)
+    min_data: Optional[int] = None
+    max_data: Optional[int] = None
+    
+    # URL search
+    url: Optional[str] = None
     
     # Pagination
     page: int = 1

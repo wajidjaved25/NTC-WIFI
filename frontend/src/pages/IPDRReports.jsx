@@ -20,7 +20,8 @@ import {
   DownloadOutlined,
   FileTextOutlined,
   HistoryOutlined,
-  DatabaseOutlined
+  DatabaseOutlined,
+  ClearOutlined
 } from '@ant-design/icons';
 import { ipdrAPI } from '../services/api';
 import dayjs from 'dayjs';
@@ -37,7 +38,6 @@ const IPDRReports = () => {
     pageSize: 50,
     total: 0,
   });
-  const [searchType, setSearchType] = useState('mobile');
   const [stats, setStats] = useState(null);
   const [lastSearchParams, setLastSearchParams] = useState(null);
   const [syslogStatus, setSyslogStatus] = useState(null);
@@ -82,37 +82,56 @@ const IPDRReports = () => {
 
   const handleSearch = async (values) => {
     setLoading(true);
+    setPagination({ ...pagination, current: 1 });
+    
     try {
       const searchParams = {
-        search_type: searchType,
-        page: pagination.current,
+        page: 1,
         page_size: pagination.pageSize,
       };
 
-      // Add search-specific fields
-      if (searchType === 'mobile' && values.mobile) {
-        searchParams.mobile = values.mobile;
-      } else if (searchType === 'cnic' && values.cnic) {
-        searchParams.cnic = values.cnic;
-      } else if (searchType === 'passport' && values.passport) {
-        searchParams.passport = values.passport;
-      } else if (searchType === 'ip' && values.ip_address) {
-        searchParams.ip_address = values.ip_address;
-      } else if (searchType === 'mac' && values.mac_address) {
-        searchParams.mac_address = values.mac_address;
-      } else if (searchType === 'date_range' && values.dateRange) {
-        searchParams.start_date = values.dateRange[0].toISOString();
-        searchParams.end_date = values.dateRange[1].toISOString();
+      // Date range
+      if (values.date_range) {
+        searchParams.start_date = values.date_range[0].toISOString();
+        searchParams.end_date = values.date_range[1].toISOString();
       }
+
+      // User information
+      if (values.user_name) searchParams.user_name = values.user_name;
+      if (values.mobile) searchParams.mobile = values.mobile;
+      if (values.cnic) searchParams.cnic = values.cnic;
+      if (values.passport) searchParams.passport = values.passport;
+
+      // Network information
+      if (values.mac_address) searchParams.mac_address = values.mac_address;
+      if (values.source_ip) searchParams.source_ip = values.source_ip;
+      if (values.destination_ip) searchParams.destination_ip = values.destination_ip;
+      if (values.translated_ip) searchParams.translated_ip = values.translated_ip;
+
+      // Port numbers
+      if (values.source_port) searchParams.source_port = values.source_port;
+      if (values.destination_port) searchParams.destination_port = values.destination_port;
+
+      // Protocol and Application
+      if (values.protocol) searchParams.protocol = values.protocol;
+      if (values.service) searchParams.service = values.service;
+      if (values.app_name) searchParams.app_name = values.app_name;
+
+      // Data usage range (convert MB to bytes)
+      if (values.min_data) searchParams.min_data = values.min_data * 1024 * 1024;
+      if (values.max_data) searchParams.max_data = values.max_data * 1024 * 1024;
+
+      // URL search
+      if (values.url) searchParams.url = values.url;
 
       setLastSearchParams(searchParams);
       const response = await ipdrAPI.searchRecords(searchParams);
       
       setSearchResults(response.data.records);
       setPagination({
-        ...pagination,
+        current: 1,
+        pageSize: pagination.pageSize,
         total: response.data.total_records,
-        current: response.data.page,
       });
 
       message.success(`Found ${response.data.total_records} records`);
@@ -124,23 +143,38 @@ const IPDRReports = () => {
     }
   };
 
+  const handleReset = () => {
+    form.resetFields();
+    setSearchResults([]);
+    setLastSearchParams(null);
+    setPagination({
+      current: 1,
+      pageSize: 50,
+      total: 0,
+    });
+  };
+
   const handleTableChange = (newPagination) => {
-    setPagination(newPagination);
     if (lastSearchParams) {
+      setLoading(true);
       const updatedParams = {
         ...lastSearchParams,
         page: newPagination.current,
         page_size: newPagination.pageSize,
       };
+      
       ipdrAPI.searchRecords(updatedParams).then(response => {
         setSearchResults(response.data.records);
         setPagination({
-          ...newPagination,
+          current: newPagination.current,
+          pageSize: newPagination.pageSize,
           total: response.data.total_records,
         });
+        setLoading(false);
       }).catch(error => {
         message.error('Failed to fetch page');
         console.error(error);
+        setLoading(false);
       });
     }
   };
@@ -174,77 +208,6 @@ const IPDRReports = () => {
     } catch (error) {
       message.error('Failed to export report');
       console.error('Export error:', error);
-    }
-  };
-
-  const renderSearchFields = () => {
-    switch (searchType) {
-      case 'mobile':
-        return (
-          <Form.Item
-            name="mobile"
-            label="Mobile Number"
-            rules={[{ required: true, message: 'Please enter mobile number' }]}
-          >
-            <Input placeholder="e.g., 03001234567" prefix="+92" />
-          </Form.Item>
-        );
-      case 'cnic':
-        return (
-          <Form.Item
-            name="cnic"
-            label="CNIC Number"
-            rules={[{ required: true, message: 'Please enter CNIC number' }]}
-          >
-            <Input placeholder="e.g., 12345-1234567-1" />
-          </Form.Item>
-        );
-      case 'passport':
-        return (
-          <Form.Item
-            name="passport"
-            label="Passport Number"
-            rules={[{ required: true, message: 'Please enter passport number' }]}
-          >
-            <Input placeholder="e.g., AB1234567" />
-          </Form.Item>
-        );
-      case 'ip':
-        return (
-          <Form.Item
-            name="ip_address"
-            label="IP Address"
-            rules={[{ required: true, message: 'Please enter IP address' }]}
-          >
-            <Input placeholder="e.g., 192.168.1.100" />
-          </Form.Item>
-        );
-      case 'mac':
-        return (
-          <Form.Item
-            name="mac_address"
-            label="MAC Address"
-            rules={[{ required: true, message: 'Please enter MAC address' }]}
-          >
-            <Input placeholder="e.g., AA:BB:CC:DD:EE:FF" />
-          </Form.Item>
-        );
-      case 'date_range':
-        return (
-          <Form.Item
-            name="dateRange"
-            label="Date Range"
-            rules={[{ required: true, message: 'Please select date range' }]}
-          >
-            <RangePicker
-              showTime
-              format="YYYY-MM-DD HH:mm:ss"
-              style={{ width: '100%' }}
-            />
-          </Form.Item>
-        );
-      default:
-        return null;
     }
   };
 
@@ -498,54 +461,171 @@ const IPDRReports = () => {
         </Card>
       )}
 
-      {/* Search Form */}
-      <Card
-        title="IPDR Search"
-        extra={
-          <Button
-            type="primary"
-            icon={<DownloadOutlined />}
-            onClick={() => handleExport('csv')}
-            disabled={!searchResults.length}
-          >
-            Export CSV
-          </Button>
-        }
-        style={{ marginBottom: 24 }}
-      >
+      {/* Advanced Search Filters */}
+      <Card title="Advanced IPDR Search Filters" style={{ marginBottom: 24 }}>
         <Form form={form} layout="vertical" onFinish={handleSearch}>
           <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item label="Search Type" required>
-                <Select
-                  value={searchType}
-                  onChange={(value) => {
-                    setSearchType(value);
-                    form.resetFields();
-                  }}
-                >
-                  <Option value="mobile">Mobile Number</Option>
-                  <Option value="cnic">CNIC Number</Option>
-                  <Option value="passport">Passport Number</Option>
-                  <Option value="ip">IP Address</Option>
-                  <Option value="mac">MAC Address</Option>
-                  <Option value="date_range">Date Range</Option>
+            {/* Date & Time Range */}
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Date & Time Range" name="date_range">
+                <RangePicker
+                  showTime
+                  format="YYYY-MM-DD HH:mm"
+                  style={{ width: '100%' }}
+                  presets={[
+                    { label: 'Today', value: [dayjs().startOf('day'), dayjs()] },
+                    { label: 'Yesterday', value: [dayjs().subtract(1, 'day').startOf('day'), dayjs().subtract(1, 'day').endOf('day')] },
+                    { label: 'Last 7 Days', value: [dayjs().subtract(6, 'days').startOf('day'), dayjs()] },
+                    { label: 'Last 30 Days', value: [dayjs().subtract(29, 'days').startOf('day'), dayjs()] },
+                    { label: 'This Month', value: [dayjs().startOf('month'), dayjs()] },
+                  ]}
+                />
+              </Form.Item>
+            </Col>
+
+            {/* User Name */}
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="User Name" name="user_name">
+                <Input placeholder="Search by name" allowClear />
+              </Form.Item>
+            </Col>
+
+            {/* Mobile Number */}
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Mobile Number" name="mobile">
+                <Input placeholder="03001234567" allowClear />
+              </Form.Item>
+            </Col>
+
+            {/* CNIC */}
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="CNIC" name="cnic">
+                <Input placeholder="12345-1234567-1" allowClear />
+              </Form.Item>
+            </Col>
+
+            {/* Passport */}
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Passport Number" name="passport">
+                <Input placeholder="AB1234567" allowClear />
+              </Form.Item>
+            </Col>
+
+            {/* MAC Address */}
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="MAC Address" name="mac_address">
+                <Input placeholder="AA:BB:CC:DD:EE:FF" allowClear />
+              </Form.Item>
+            </Col>
+
+            {/* Source IP */}
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Source IP Address" name="source_ip">
+                <Input placeholder="192.168.1.100" allowClear />
+              </Form.Item>
+            </Col>
+
+            {/* Destination IP */}
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Destination IP Address" name="destination_ip">
+                <Input placeholder="8.8.8.8" allowClear />
+              </Form.Item>
+            </Col>
+
+            {/* Translated IP */}
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Translated IP (NAT)" name="translated_ip">
+                <Input placeholder="203.0.113.1" allowClear />
+              </Form.Item>
+            </Col>
+
+            {/* Source Port */}
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Source Port" name="source_port">
+                <Input type="number" placeholder="e.g., 443" allowClear />
+              </Form.Item>
+            </Col>
+
+            {/* Destination Port */}
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Destination Port" name="destination_port">
+                <Input type="number" placeholder="e.g., 80" allowClear />
+              </Form.Item>
+            </Col>
+
+            {/* Protocol */}
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Protocol" name="protocol">
+                <Select placeholder="Select protocol" allowClear>
+                  <Option value="TCP">TCP</Option>
+                  <Option value="UDP">UDP</Option>
+                  <Option value="ICMP">ICMP</Option>
+                  <Option value="GRE">GRE</Option>
+                  <Option value="ESP">ESP</Option>
                 </Select>
               </Form.Item>
             </Col>
-            <Col span={16}>{renderSearchFields()}</Col>
+
+            {/* Service */}
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Service" name="service">
+                <Input placeholder="e.g., HTTPS, HTTP, FTP" allowClear />
+              </Form.Item>
+            </Col>
+
+            {/* Application Name */}
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Application Name" name="app_name">
+                <Input placeholder="e.g., Chrome, Skype" allowClear />
+              </Form.Item>
+            </Col>
+
+            {/* URL */}
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="URL/Domain" name="url">
+                <Input placeholder="example.com" allowClear />
+              </Form.Item>
+            </Col>
+
+            {/* Min Data Usage */}
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Min Data Usage (MB)" name="min_data">
+                <Input type="number" placeholder="0" min={0} allowClear />
+              </Form.Item>
+            </Col>
+
+            {/* Max Data Usage */}
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Max Data Usage (MB)" name="max_data">
+                <Input type="number" placeholder="Unlimited" min={0} allowClear />
+              </Form.Item>
+            </Col>
           </Row>
 
-          <Form.Item>
-            <Button
-              type="primary"
-              htmlType="submit"
-              icon={<SearchOutlined />}
-              loading={loading}
-            >
-              Search
-            </Button>
-          </Form.Item>
+          <Row>
+            <Col span={24} style={{ textAlign: 'right' }}>
+              <Space>
+                <Button icon={<ClearOutlined />} onClick={handleReset}>
+                  Clear All Filters
+                </Button>
+                <Button
+                  type="primary"
+                  htmlType="submit"
+                  icon={<SearchOutlined />}
+                  loading={loading}
+                >
+                  Search IPDR Records
+                </Button>
+                <Button
+                  icon={<DownloadOutlined />}
+                  onClick={() => handleExport('csv')}
+                  disabled={!searchResults.length}
+                >
+                  Export to CSV
+                </Button>
+              </Space>
+            </Col>
+          </Row>
         </Form>
       </Card>
 

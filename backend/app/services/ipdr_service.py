@@ -199,13 +199,15 @@ class IPDRService:
         admin_id: int,
         ip_address: str
     ) -> IPDRSearchResponse:
-        """Search IPDR records based on various criteria"""
+        """Search IPDR records based on comprehensive criteria"""
         
         # Build query
         query = db.query(
             FirewallLog,
             User.name.label('user_name'),
             User.mobile.label('user_mobile'),
+            User.cnic.label('user_cnic'),
+            User.passport.label('user_passport'),
             WiFiSession.mac_address.label('session_mac'),
             WiFiSession.start_time.label('login_time'),
             WiFiSession.end_time.label('logout_time'),
@@ -216,28 +218,65 @@ class IPDRService:
             User, FirewallLog.user_id == User.id
         )
         
-        # Apply filters based on search type
-        if search_request.search_type == 'mobile' and search_request.mobile:
+        # Apply date range filter
+        if search_request.start_date:
+            query = query.filter(FirewallLog.log_timestamp >= search_request.start_date)
+        if search_request.end_date:
+            query = query.filter(FirewallLog.log_timestamp <= search_request.end_date)
+        
+        # User information filters
+        if search_request.user_name:
+            query = query.filter(User.name.ilike(f'%{search_request.user_name}%'))
+        if search_request.mobile:
             query = query.filter(User.mobile == search_request.mobile)
-        
-        elif search_request.search_type == 'cnic' and search_request.cnic:
-            # Assuming CNIC is stored in a user field (adjust as needed)
+        if search_request.cnic:
             query = query.filter(User.cnic == search_request.cnic)
-        
-        elif search_request.search_type == 'passport' and search_request.passport:
+        if search_request.passport:
             query = query.filter(User.passport == search_request.passport)
         
-        elif search_request.search_type == 'ip' and search_request.ip_address:
-            query = query.filter(FirewallLog.source_ip == search_request.ip_address)
+        # Network identifier filters
+        if search_request.mac_address:
+            query = query.filter(
+                or_(
+                    WiFiSession.mac_address == search_request.mac_address,
+                    FirewallLog.source_mac == search_request.mac_address
+                )
+            )
+        if search_request.source_ip:
+            query = query.filter(FirewallLog.source_ip == search_request.source_ip)
+        if search_request.destination_ip:
+            query = query.filter(FirewallLog.destination_ip == search_request.destination_ip)
+        if search_request.translated_ip:
+            query = query.filter(FirewallLog.translated_ip == search_request.translated_ip)
         
-        elif search_request.search_type == 'mac' and search_request.mac_address:
-            query = query.filter(WiFiSession.mac_address == search_request.mac_address)
+        # Port filters
+        if search_request.source_port:
+            query = query.filter(FirewallLog.source_port == search_request.source_port)
+        if search_request.destination_port:
+            query = query.filter(FirewallLog.destination_port == search_request.destination_port)
         
-        elif search_request.search_type == 'date_range':
-            if search_request.start_date:
-                query = query.filter(FirewallLog.log_timestamp >= search_request.start_date)
-            if search_request.end_date:
-                query = query.filter(FirewallLog.log_timestamp <= search_request.end_date)
+        # Protocol and Application filters
+        if search_request.protocol:
+            query = query.filter(FirewallLog.protocol_name.ilike(f'%{search_request.protocol}%'))
+        if search_request.service:
+            query = query.filter(FirewallLog.service.ilike(f'%{search_request.service}%'))
+        if search_request.app_name:
+            query = query.filter(FirewallLog.app_name.ilike(f'%{search_request.app_name}%'))
+        
+        # Data usage range filter (bytes)
+        if search_request.min_data is not None:
+            query = query.filter((FirewallLog.sent_bytes + FirewallLog.received_bytes) >= search_request.min_data)
+        if search_request.max_data is not None:
+            query = query.filter((FirewallLog.sent_bytes + FirewallLog.received_bytes) <= search_request.max_data)
+        
+        # URL filter
+        if search_request.url:
+            query = query.filter(
+                or_(
+                    FirewallLog.url.ilike(f'%{search_request.url}%'),
+                    FirewallLog.domain_name.ilike(f'%{search_request.url}%')
+                )
+            )
         
         # Count total results
         total_records = query.count()
@@ -252,10 +291,12 @@ class IPDRService:
         # Transform to IPDR records
         ipdr_records = []
         for result in results:
-            log, user_name, user_mobile, session_mac, login_time, logout_time, session_duration = result
+            log, user_name, user_mobile, user_cnic, user_passport, session_mac, login_time, logout_time, session_duration = result
             
             ipdr_record = IPDRRecord(
                 full_name=user_name,
+                cnic=user_cnic,
+                passport=user_passport,
                 mobile=user_mobile,
                 login_time=login_time,
                 logout_time=logout_time,
@@ -279,7 +320,7 @@ class IPDRService:
         # Log search for audit
         search_history = IPDRSearchHistory(
             admin_id=admin_id,
-            search_type=search_request.search_type,
+            search_type='advanced_search',
             search_params=search_request.dict(),
             results_count=total_records,
             ip_address=ip_address
