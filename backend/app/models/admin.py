@@ -22,12 +22,19 @@ class Admin(Base):
     login_attempts = Column(Integer, default=0)
     locked_until = Column(DateTime(timezone=True), nullable=True)
     
+    # Permission columns
+    can_manage_portal = Column(Boolean, default=False)
+    can_manage_sessions = Column(Boolean, default=False)
+    can_view_records = Column(Boolean, default=True)
+    can_view_ipdr = Column(Boolean, default=True)
+    can_manage_radius = Column(Boolean, default=False)
+    
     # Relationships
     logs = relationship("SystemLog", back_populates="user")
     
     __table_args__ = (
         CheckConstraint(
-            "role IN ('superadmin', 'admin', 'reports_user', 'ads_user')",
+            "role IN ('superadmin', 'admin', 'reports_user', 'ads_user', 'ipdr_viewer')",
             name='check_admin_role'
         ),
         CheckConstraint(
