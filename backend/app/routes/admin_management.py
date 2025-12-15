@@ -46,8 +46,8 @@ class AdminPasswordUpdate(BaseModel):
 class AdminResponse(BaseModel):
     id: int
     username: str
-    email: str
-    full_name: str
+    email: Optional[str] = None
+    full_name: Optional[str] = None
     role: str
     is_active: bool
     can_manage_portal: bool
