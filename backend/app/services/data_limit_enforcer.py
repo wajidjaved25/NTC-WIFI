@@ -282,6 +282,7 @@ class DataLimitEnforcer:
     async def _send_radius_coa_disconnect(self, db: Session, username: str, session_id: str, mac_address: str, nas_ip: str) -> bool:
         """
         Send RADIUS CoA Disconnect-Request to immediately disconnect user.
+        Looks up correct CoA port and secret from sites table.
         
         Returns:
             bool: True if disconnect was acknowledged, False otherwise
@@ -302,19 +303,37 @@ class DataLimitEnforcer:
                 print("⚠️ radclient not found - install with: sudo apt install freeradius-utils")
                 return False
             
-            # RADIUS shared secret - must match Omada CoA Password
-            coa_secret = "MySecretRadius2024!"
+            # Lookup site-specific CoA port and secret from sites table
+            site_info = db.execute(
+                text("""
+                    SELECT radius_coa_port, radius_secret 
+                    FROM sites 
+                    WHERE radius_nas_ip = :nas_ip AND is_active = TRUE
+                    LIMIT 1
+                """),
+                {"nas_ip": nas_ip}
+            ).fetchone()
+            
+            if site_info:
+                coa_port = site_info[0]
+                coa_secret = site_info[1]
+                print(f"📡 Using site-specific CoA port {coa_port} for NAS {nas_ip}")
+            else:
+                # Fallback to default if site not found
+                coa_port = 3799
+                coa_secret = "MySecretRadius2024!"
+                print(f"⚠️ Site not found for NAS {nas_ip}, using default port {coa_port}")
             
             # Build the disconnect request
             # Using here-doc style for proper attribute formatting
-            disconnect_cmd = f'''{radclient_path} -x {nas_ip}:3799 disconnect {coa_secret} << EOF
+            disconnect_cmd = f'''{radclient_path} -x {nas_ip}:{coa_port} disconnect {coa_secret} << EOF
 User-Name = "{username}"
 Acct-Session-Id = "{session_id}"
 Calling-Station-Id = "{mac_address}"
 NAS-IP-Address = {nas_ip}
 EOF'''
             
-            print(f"Sending RADIUS CoA Disconnect to {nas_ip}:3799 for {username}")
+            print(f"Sending RADIUS CoA Disconnect to {nas_ip}:{coa_port} for {username}")
             
             # Execute the command
             process = await asyncio.create_subprocess_shell(

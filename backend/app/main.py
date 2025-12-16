@@ -7,16 +7,18 @@ from .config import settings
 from .database import engine, Base
 from .services.data_limit_enforcer import data_limit_enforcer
 from .services.fortigate_syslog_receiver import syslog_receiver
+from .services.coa_service import coa_service
 
 # Import all models (required for SQLAlchemy to create tables)
 from .models import (
     Admin, User, PortalDesign, PortalSettings,
     Advertisement, AdAnalytics, Session, OmadaConfig,
-    DailyUsage, SystemLog, OTP, FirewallLog, FirewallImportJob, IPDRSearchHistory
+    DailyUsage, SystemLog, OTP, FirewallLog, FirewallImportJob, IPDRSearchHistory,
+    Site, NASClient
 )
 
 # Import routes
-from .routes import auth, omada, records, ads, portal, dashboard, public, radius_admin, ipdr, user_management, admin_management
+from .routes import auth, omada, records, ads, portal, dashboard, public, radius_admin, ipdr, user_management, admin_management, site_management
 
 # Create FastAPI app
 app = FastAPI(
@@ -57,6 +59,7 @@ app.include_router(radius_admin.router, prefix="/api")  # RADIUS admin routes
 app.include_router(ipdr.router, prefix="/api")  # IPDR reports
 app.include_router(user_management.router, prefix="/api")  # WiFi user management
 app.include_router(admin_management.router, prefix="/api")  # Admin user management
+app.include_router(site_management.router, prefix="/api")  # Site management
 
 @app.on_event("startup")
 async def startup_event():
@@ -66,6 +69,17 @@ async def startup_event():
     print(f"📍 Environment: {settings.APP_ENV}")
     print(f"🔗 Database: Connected")
     print(f"📁 Media Directory: {MEDIA_BASE}")
+    
+    # Initialize CoA service with site configurations
+    from .database import SessionLocal
+    db = SessionLocal()
+    try:
+        coa_service.load_sites_config(db)
+        print(f"📡 CoA Service: Initialized with {len(coa_service.sites_config)} sites")
+    except Exception as e:
+        print(f"⚠️  CoA Service: Failed to initialize - {e}")
+    finally:
+        db.close()
     
     # Start data limit enforcement
     await data_limit_enforcer.start()

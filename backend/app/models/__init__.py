@@ -15,6 +15,7 @@ from .system_log import SystemLog
 from .otp import OTP
 from .radius_settings import RadiusSettings
 from .ipdr import FirewallLog, FirewallImportJob, IPDRSearchHistory
+from .site import Site, NASClient
 
 __all__ = [
     "Admin",
@@ -31,5 +32,7 @@ __all__ = [
     "RadiusSettings",
     "FirewallLog",
     "FirewallImportJob",
-    "IPDRSearchHistory"
+    "IPDRSearchHistory",
+    "Site",
+    "NASClient"
 ]
