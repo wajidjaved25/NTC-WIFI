@@ -18,11 +18,8 @@ class Site(Base):
     site_code = Column(String(20), unique=True, nullable=False)
     location = Column(String(255))
     
-    # OPTION 1: Link to existing omada_config (RECOMMENDED for shared controller)
-    omada_config_id = Column(Integer, ForeignKey('omada_config.id', ondelete='SET NULL'), nullable=True)
-    
-    # OPTION 2: Site-specific Omada Controller Details (for unique controllers)
-    omada_controller_ip = Column(String(45), nullable=True)  # nullable if using omada_config_id
+    # Omada Controller Details
+    omada_controller_ip = Column(String(45), nullable=False)
     omada_controller_port = Column(Integer, default=8043)
     omada_site_id = Column(String(100), default='Default')
     omada_username = Column(String(100))
