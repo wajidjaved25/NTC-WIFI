@@ -101,6 +101,9 @@ def has_permission(user: Admin, permission: str) -> bool:
         ],
         "ads_user": [
             "manage_ads", "view_analytics"
+        ],
+        "ipdr_viewer": [
+            "view_records", "export_records", "view_ipdr"
         ]
     }
     
