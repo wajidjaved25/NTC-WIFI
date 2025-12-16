@@ -10,6 +10,7 @@ import {
   LogoutOutlined,
   WifiOutlined,
   DatabaseOutlined,
+  EnvironmentOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useLocation } from 'react-router-dom'
 import './MainLayout.css'
@@ -35,6 +36,15 @@ function MainLayout({ children, user, onLogout }) {
         key: '/omada',
         icon: <SettingOutlined />,
         label: 'Omada Settings',
+      })
+    }
+
+    // Site Management - superadmin & admin only
+    if (['superadmin', 'admin'].includes(user.role)) {
+      items.push({
+        key: '/sites',
+        icon: <EnvironmentOutlined />,
+        label: 'Site Management',
       })
     }
 
@@ -146,6 +156,7 @@ function MainLayout({ children, user, onLogout }) {
               {location.pathname === '/ipdr-reports' && 'IPDR Reports'}
               {location.pathname === '/user-management' && 'WiFi User Management'}
               {location.pathname === '/admin-management' && 'Admin Management'}
+              {location.pathname === '/sites' && 'Site Management'}
             </div>
             <div className="header-user">
               <span className="user-name">{user.full_name || user.username}</span>

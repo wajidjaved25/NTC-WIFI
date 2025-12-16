@@ -1,0 +1,116 @@
+.site-management {
+  padding: 24px;
+}
+
+.site-management .ant-card {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+}
+
+.site-management .ant-table {
+  background: white;
+}
+
+.site-management .ant-table-thead > tr > th {
+  background: #fafafa;
+  font-weight: 600;
+}
+
+.site-management code {
+  background: #f5f5f5;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+}
+
+.site-management .ant-statistic {
+  text-align: center;
+}
+
+.site-management .ant-statistic-title {
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.65);
+}
+
+.site-management .ant-statistic-content {
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.site-management h4 {
+  margin-top: 16px;
+  margin-bottom: 12px;
+  color: #1890ff;
+  font-weight: 600;
+  border-bottom: 2px solid #e8e8e8;
+  padding-bottom: 8px;
+}
+
+.site-management .ant-badge-status-text {
+  font-weight: 500;
+}
+
+.site-management .ant-modal-body {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.site-management .ant-form-item {
+  margin-bottom: 16px;
+}
+
+/* Stats cards styling */
+.site-management .ant-card-body {
+  padding: 16px;
+}
+
+.site-management .ant-col .ant-card {
+  height: 100%;
+}
+
+/* Active sessions table */
+.site-management .ant-table-small {
+  font-size: 13px;
+}
+
+.site-management .ant-table-small .ant-table-tbody > tr > td {
+  padding: 8px;
+}
+
+/* Button hover effects */
+.site-management .ant-btn-link:hover {
+  transform: scale(1.1);
+  transition: transform 0.2s;
+}
+
+/* Badge styling */
+.site-management .ant-badge-status-success {
+  background-color: #52c41a;
+}
+
+.site-management .ant-badge-status-default {
+  background-color: #d9d9d9;
+}
+
+/* Tag colors */
+.site-management .ant-tag {
+  font-weight: 500;
+  border-radius: 4px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .site-management {
+    padding: 12px;
+  }
+  
+  .site-management .ant-col {
+    margin-bottom: 12px;
+  }
+  
+  .site-management .ant-modal {
+    top: 20px;
+    max-width: 95%;
+  }
+}

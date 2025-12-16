@@ -13,6 +13,7 @@ import UserManagement from './pages/UserManagement'
 import RadiusSessions from './pages/RadiusSessions'
 import RadiusSettings from './pages/RadiusSettings'
 import IPDRReports from './pages/IPDRReports'
+import SiteManagement from './pages/SiteManagement'
 import { authAPI } from './services/api'
 import './App.css'
 
@@ -213,6 +214,19 @@ function App() {
           user && ['superadmin', 'admin', 'ipdr_viewer'].includes(user.role) ? (
             <MainLayout user={user} onLogout={handleLogout}>
               <IPDRReports />
+            </MainLayout>
+          ) : (
+            <Navigate to="/dashboard" />
+          )
+        } 
+      />
+
+      <Route 
+        path="/sites" 
+        element={
+          user && ['superadmin', 'admin'].includes(user.role) ? (
+            <MainLayout user={user} onLogout={handleLogout}>
+              <SiteManagement />
             </MainLayout>
           ) : (
             <Navigate to="/dashboard" />

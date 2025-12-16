@@ -201,4 +201,24 @@ export const ipdrAPI = {
     api.post('/ipdr/syslog/restart'),
 };
 
+// Site Management APIs
+export const siteAPI = {
+  getSites: (activeOnly = false) => 
+    api.get('/sites', { params: { active_only: activeOnly } }),
+  getSite: (id) => 
+    api.get(`/sites/${id}`),
+  createSite: (data) => 
+    api.post('/sites', data),
+  updateSite: (id, data) => 
+    api.put(`/sites/${id}`, data),
+  deleteSite: (id) => 
+    api.delete(`/sites/${id}`),
+  getSiteStats: (id) => 
+    api.get(`/sites/${id}/stats`),
+  getSiteActiveSessions: (id) => 
+    api.get(`/sites/${id}/sessions/active`),
+  disconnectUser: (id, data) => 
+    api.post(`/sites/${id}/disconnect`, data),
+};
+
 export default api;
