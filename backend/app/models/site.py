@@ -41,7 +41,6 @@ class Site(Base):
     created_by = Column(Integer, ForeignKey('admins.id'))
     
     # Relationships
-    sessions = relationship("Session", back_populates="site")
     nas_clients = relationship("NASClient", back_populates="site", cascade="all, delete-orphan")
 
 
