@@ -5,7 +5,11 @@ import {
   Button,
   Space,
   Tag,
+  Modal,
   Form,
+  Input,
+  InputNumber,
+  Switch,
   message,
   Popconfirm,
   Tabs,
@@ -13,8 +17,7 @@ import {
   Row,
   Col,
   Tooltip,
-  Badge,
-  Modal
+  Badge
 } from 'antd';
 import {
   PlusOutlined,
@@ -25,17 +28,16 @@ import {
   DisconnectOutlined,
   EnvironmentOutlined,
   CheckCircleOutlined,
+  CloseCircleOutlined,
   ReloadOutlined
 } from '@ant-design/icons';
-import { siteAPI, omadaAPI } from '../services/api';
-import SiteFormModal from '../components/Site/SiteFormModal';
+import { siteAPI } from '../services/api';
 import './SiteManagement.css';
 
 const { TabPane } = Tabs;
 
 const SiteManagement = () => {
   const [sites, setSites] = useState([]);
-  const [omadaConfigs, setOmadaConfigs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingSite, setEditingSite] = useState(null);
@@ -46,7 +48,6 @@ const SiteManagement = () => {
 
   useEffect(() => {
     fetchSites();
-    fetchOmadaConfigs();
   }, []);
 
   const fetchSites = async () => {
@@ -58,18 +59,6 @@ const SiteManagement = () => {
       message.error('Failed to fetch sites: ' + error.message);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchOmadaConfigs = async () => {
-    try {
-      const response = await omadaAPI.getConfig();
-      // Handle both single config and array of configs
-      const configs = Array.isArray(response.data) ? response.data : [response.data];
-      setOmadaConfigs(configs);
-    } catch (error) {
-      console.error('Failed to fetch omada configs:', error);
-      setOmadaConfigs([]);
     }
   };
 
