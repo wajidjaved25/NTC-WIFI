@@ -30,6 +30,51 @@ function LoginForm({ portalDesign, onSuccess }) {
     }
   }, [timer]);
 
+  // WebOTP auto-fill functionality
+  const requestOTPAutoFill = async () => {
+    // Check if WebOTP API is supported
+    if ('OTPCredential' in window) {
+      try {
+        const ac = new AbortController();
+        const timeoutId = setTimeout(() => ac.abort(), 120000);
+        
+        console.log('🔍 WebOTP: Requesting SMS permission...');
+        
+        // Request OTP from SMS
+        const otpCredential = await navigator.credentials.get({
+          otp: { transport: ['sms'] },
+          signal: ac.signal
+        });
+        
+        clearTimeout(timeoutId);
+        console.log('✅ WebOTP: OTP received:', otpCredential.code);
+        
+        // Auto-fill OTP inputs
+        const otpArray = otpCredential.code.split('');
+        setOtp(otpArray);
+        
+        // Focus last input
+        if (otpRefs.current[5]) {
+          otpRefs.current[5].focus();
+        }
+        
+        // Show success message
+        setSuccess('OTP auto-filled from SMS!');
+        setTimeout(() => setSuccess(''), 2000);
+        
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          console.log('⏱️ WebOTP: Timeout - no SMS received');
+        } else {
+          console.log('❌ WebOTP: Cancelled or unavailable:', err.message);
+        }
+        // User can still enter OTP manually - no error shown
+      }
+    } else {
+      console.log('ℹ️ WebOTP: Not supported on this browser');
+    }
+  };
+
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
     setFormData({
@@ -88,7 +133,13 @@ function LoginForm({ portalDesign, onSuccess }) {
       setStep('otp');
       setTimer(120); // 2 minutes
       setError('');
-      setSuccess('OTP sent successfully!');
+      setSuccess('OTP sent! Checking SMS...');
+      
+      // Trigger WebOTP auto-fill
+      setTimeout(() => {
+        requestOTPAutoFill();
+      }, 500);
+      
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to send OTP');
@@ -184,7 +235,13 @@ function LoginForm({ portalDesign, onSuccess }) {
       await sendOTP(formData.mobile);
       setTimer(120);
       setOtp(['', '', '', '', '', '']);
-      setSuccess('OTP resent successfully!');
+      setSuccess('OTP resent! Checking SMS...');
+      
+      // Trigger WebOTP auto-fill on resend
+      setTimeout(() => {
+        requestOTPAutoFill();
+      }, 500);
+      
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to resend OTP');

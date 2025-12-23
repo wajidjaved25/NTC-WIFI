@@ -31,7 +31,12 @@ async def send_otp_sms(mobile: str, otp: str) -> dict:
         api_key = settings.SUPERAPP_API_KEY  # Bearer token
         sender_id = settings.SUPERAPP_SENDER_ID
         
-        message = f"Your OTP for NTC WiFi is: {otp}. Valid for 5 minutes. Do not share this code."
+        # WebOTP-compatible format for auto-fill
+        # CRITICAL: @domain and #code MUST be on the same line with space between them
+        message = f"""Your NTC WiFi OTP: {otp}
+Valid for 5 minutes. Do not share.
+
+@pmfreewifi.local #{otp}"""
         
         # v3 API format
         payload = {
