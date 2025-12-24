@@ -30,49 +30,71 @@ function LoginForm({ portalDesign, onSuccess }) {
     }
   }, [timer]);
 
-  // WebOTP auto-fill functionality
-  const requestOTPAutoFill = async () => {
-    // Check if WebOTP API is supported
-    if ('OTPCredential' in window) {
-      try {
-        const ac = new AbortController();
-        const timeoutId = setTimeout(() => ac.abort(), 120000);
-        
-        console.log('🔍 WebOTP: Requesting SMS permission...');
-        
-        // Request OTP from SMS
-        const otpCredential = await navigator.credentials.get({
-          otp: { transport: ['sms'] },
-          signal: ac.signal
-        });
-        
-        clearTimeout(timeoutId);
-        console.log('✅ WebOTP: OTP received:', otpCredential.code);
-        
-        // Auto-fill OTP inputs
-        const otpArray = otpCredential.code.split('');
-        setOtp(otpArray);
-        
-        // Focus last input
-        if (otpRefs.current[5]) {
-          otpRefs.current[5].focus();
-        }
-        
-        // Show success message
-        setSuccess('OTP auto-filled from SMS!');
-        setTimeout(() => setSuccess(''), 2000);
-        
-      } catch (err) {
-        if (err.name === 'AbortError') {
-          console.log('⏱️ WebOTP: Timeout - no SMS received');
-        } else {
-          console.log('❌ WebOTP: Cancelled or unavailable:', err.message);
-        }
-        // User can still enter OTP manually - no error shown
+  // Clipboard monitoring for auto-fill (works with Superapp)
+  const startClipboardMonitoring = () => {
+    let clipboardCheckInterval;
+    let attempts = 0;
+    const maxAttempts = 240; // 2 minutes (240 * 500ms)
+    
+    const checkClipboard = async () => {
+      attempts++;
+      
+      // Stop after 2 minutes
+      if (attempts >= maxAttempts) {
+        clearInterval(clipboardCheckInterval);
+        return;
       }
-    } else {
-      console.log('ℹ️ WebOTP: Not supported on this browser');
-    }
+      
+      try {
+        // Check if clipboard API is available
+        if (navigator.clipboard && navigator.clipboard.readText) {
+          const text = await navigator.clipboard.readText();
+          
+          // Check if clipboard contains 6-digit OTP
+          const otpMatch = text.match(/\b\d{6}\b/);
+          
+          if (otpMatch) {
+            const otpCode = otpMatch[0];
+            
+            console.log('✅ Clipboard: OTP detected:', otpCode);
+            
+            // Auto-fill OTP
+            const otpArray = otpCode.split('');
+            setOtp(otpArray);
+            
+            // Focus last input
+            if (otpRefs.current[5]) {
+              otpRefs.current[5].focus();
+            }
+            
+            // Show success message
+            setSuccess('✓ OTP auto-filled from clipboard!');
+            setTimeout(() => setSuccess(''), 2000);
+            
+            // Stop monitoring
+            clearInterval(clipboardCheckInterval);
+            
+            // Optional: Auto-verify after 1 second
+            setTimeout(() => {
+              if (otpArray.length === 6) {
+                handleVerifyOTP({ preventDefault: () => {} });
+              }
+            }, 1000);
+          }
+        }
+      } catch (err) {
+        // Permission denied or not available
+        // User will paste manually - no error shown
+        if (attempts === 1) {
+          console.log('ℹ️ Clipboard: Auto-detect not available, user can paste manually');
+        }
+      }
+    };
+    
+    // Check clipboard every 500ms
+    clipboardCheckInterval = setInterval(checkClipboard, 500);
+    
+    console.log('🔍 Clipboard: Monitoring started (copy OTP from Superapp)');
   };
 
   const handleInputChange = (e) => {
@@ -133,11 +155,11 @@ function LoginForm({ portalDesign, onSuccess }) {
       setStep('otp');
       setTimer(120); // 2 minutes
       setError('');
-      setSuccess('OTP sent! Checking SMS...');
+      setSuccess('OTP sent to Superapp! Copy to auto-fill...');
       
-      // Trigger WebOTP auto-fill
+      // Start clipboard monitoring
       setTimeout(() => {
-        requestOTPAutoFill();
+        startClipboardMonitoring();
       }, 500);
       
       setTimeout(() => setSuccess(''), 3000);
@@ -235,11 +257,11 @@ function LoginForm({ portalDesign, onSuccess }) {
       await sendOTP(formData.mobile);
       setTimer(120);
       setOtp(['', '', '', '', '', '']);
-      setSuccess('OTP resent! Checking SMS...');
+      setSuccess('OTP resent to Superapp! Copy to auto-fill...');
       
-      // Trigger WebOTP auto-fill on resend
+      // Start clipboard monitoring on resend
       setTimeout(() => {
-        requestOTPAutoFill();
+        startClipboardMonitoring();
       }, 500);
       
       setTimeout(() => setSuccess(''), 3000);
@@ -520,6 +542,22 @@ function LoginForm({ portalDesign, onSuccess }) {
                   }}
                 />
               ))}
+            </div>
+
+            {/* Helper instruction */}
+            <div style={{ 
+              textAlign: 'center', 
+              padding: '12px', 
+              background: '#f0f9ff', 
+              borderRadius: '8px', 
+              marginBottom: '16px',
+              fontSize: '14px',
+              color: '#0369a1',
+              lineHeight: '1.5'
+            }}>
+              <strong>💡 Quick Tip:</strong> Copy OTP from Superapp, it will auto-fill here!
+              <br/>
+              <small style={{ fontSize: '12px', opacity: 0.8 }}>Or paste/type manually</small>
             </div>
 
             {/* Timer / Resend */}
