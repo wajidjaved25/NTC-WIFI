@@ -135,7 +135,7 @@ class SingleDeviceEnforcer:
             logger.info(f"  Username: {username}")
             logger.info(f"  IP: {session.ip_address}")
             logger.info(f"  MAC: {session.mac_address}")
-            logger.info(f"  Site ID: {session.site_id}")
+            logger.info(f"  Site ID: {getattr(session, 'site_id', None)}")
             
             # Send CoA disconnect packet using the CoA service
             # Need to run async function in sync context
@@ -146,7 +146,7 @@ class SingleDeviceEnforcer:
                 coa_result = loop.run_until_complete(
                     coa_service.disconnect_user(
                         username=username,
-                        site_id=session.site_id,
+                        site_id=getattr(session, 'site_id', None),
                         session_id=str(session.id),
                         framed_ip=session.ip_address
                     )
@@ -231,7 +231,7 @@ class SingleDeviceEnforcer:
                     'start_time': s.start_time.isoformat() if s.start_time else None,
                     'ap_mac': s.ap_mac,
                     'ssid': s.ssid,
-                    'site_id': s.site_id
+                    'site_id': getattr(s, 'site_id', None)
                 }
                 for s in active_sessions
             ]
