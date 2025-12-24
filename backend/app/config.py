@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     ENCRYPTION_KEY: str  # For encrypting Omada passwords
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 hours
+    ENABLE_API_DOCS: bool = False  # MUST be False in production
     
     # CORS - Added localhost:3001 for public portal
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:3001,http://localhost:5173"
@@ -58,6 +59,29 @@ class Settings(BaseSettings):
     @property
     def extensions_list(self) -> List[str]:
         return [ext.strip() for ext in self.ALLOWED_EXTENSIONS.split(",")]
+    
+    # Security Validators
+    @validator('SECRET_KEY')
+    def validate_secret_key(cls, v):
+        if len(v) < 32:
+            raise ValueError('SECRET_KEY must be at least 32 characters long')
+        if v == 'your-super-secret-key-change-this-in-production-min-32-chars':
+            raise ValueError('SECRET_KEY must be changed from default value')
+        return v
+    
+    @validator('ENCRYPTION_KEY')
+    def validate_encryption_key(cls, v):
+        if len(v) != 44:
+            raise ValueError('ENCRYPTION_KEY must be exactly 44 characters (Fernet key). Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"')
+        return v
+    
+    @validator('DB_PASSWORD')
+    def validate_db_password(cls, v):
+        if v in ['your_secure_password_here', 'postgres', 'password', '123456']:
+            raise ValueError('DB_PASSWORD must be changed from default/common value')
+        if len(v) < 12:
+            raise ValueError('DB_PASSWORD must be at least 12 characters long')
+        return v
     
     # Portal Settings
     PORTAL_DOMAIN: str = "admin.local"

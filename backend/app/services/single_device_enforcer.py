@@ -10,10 +10,11 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from typing import Optional, Dict
 import logging
+import asyncio
 
 from ..models.session import Session as WiFiSession
 from ..models.user import User
-from ..services.radius_auth_client import RadiusAuthClient
+from ..services.coa_service import coa_service
 
 logger = logging.getLogger(__name__)
 
@@ -23,11 +24,8 @@ class SingleDeviceEnforcer:
     Enforces single-device login policy for WiFi users
     """
     
-    def __init__(self, db: Session, radius_server: str = "127.0.0.1", radius_secret: str = "testing123"):
+    def __init__(self, db: Session):
         self.db = db
-        self.radius_server = radius_server
-        self.radius_secret = radius_secret
-        self.radius_client = RadiusAuthClient(radius_server, radius_secret)
     
     def check_and_disconnect_old_session(self, user_id: int, new_mac_address: str) -> Dict:
         """
@@ -68,6 +66,9 @@ class SingleDeviceEnforcer:
             return result
         
         # Check if any active session is on a different device
+        disconnect_attempted = False
+        disconnect_successful = False
+        
         for session in active_sessions:
             # Normalize MAC addresses for comparison
             session_mac = self._normalize_mac(session.mac_address)
@@ -84,6 +85,7 @@ class SingleDeviceEnforcer:
                 
                 # Disconnect old session via RADIUS CoA
                 disconnect_success = self._disconnect_session(session)
+                disconnect_attempted = True
                 
                 if disconnect_success:
                     # Update session status in database
@@ -98,6 +100,7 @@ class SingleDeviceEnforcer:
                     
                     self.db.commit()
                     
+                    disconnect_successful = True
                     result['disconnected'] = True
                     result['message'] = f'Old session on {session_mac} disconnected successfully'
                     
@@ -105,6 +108,10 @@ class SingleDeviceEnforcer:
                 else:
                     result['message'] = f'Failed to disconnect old session on {session_mac}'
                     logger.warning(f"✗ Failed to disconnect session {session.id}")
+        
+        # If we attempted disconnects but none succeeded
+        if disconnect_attempted and not disconnect_successful:
+            result['disconnected'] = False
         
         return result
     
@@ -128,24 +135,36 @@ class SingleDeviceEnforcer:
             logger.info(f"  Username: {username}")
             logger.info(f"  IP: {session.ip_address}")
             logger.info(f"  MAC: {session.mac_address}")
+            logger.info(f"  Site ID: {session.site_id}")
             
-            # Send CoA disconnect packet
-            result = self.radius_client.disconnect_session(
-                username=username,
-                nas_ip_address=session.ip_address or "192.168.3.254",
-                framed_ip_address=session.ip_address,
-                calling_station_id=session.mac_address
-            )
+            # Send CoA disconnect packet using the CoA service
+            # Need to run async function in sync context
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
             
-            if result.get('success'):
+            try:
+                coa_result = loop.run_until_complete(
+                    coa_service.disconnect_user(
+                        username=username,
+                        site_id=session.site_id,
+                        session_id=str(session.id),
+                        framed_ip=session.ip_address
+                    )
+                )
+            finally:
+                loop.close()
+            
+            if coa_result.get('success'):
                 logger.info(f"✓ RADIUS CoA disconnect successful for session {session.id}")
                 return True
             else:
-                logger.error(f"✗ RADIUS CoA disconnect failed for session {session.id}: {result.get('message')}")
+                logger.error(f"✗ RADIUS CoA disconnect failed for session {session.id}: {coa_result.get('message')}")
                 return False
                 
         except Exception as e:
             logger.error(f"✗ Error disconnecting session {session.id}: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return False
     
     def _normalize_mac(self, mac_address: str) -> str:
@@ -211,7 +230,8 @@ class SingleDeviceEnforcer:
                     'ip_address': s.ip_address,
                     'start_time': s.start_time.isoformat() if s.start_time else None,
                     'ap_mac': s.ap_mac,
-                    'ssid': s.ssid
+                    'ssid': s.ssid,
+                    'site_id': s.site_id
                 }
                 for s in active_sessions
             ]

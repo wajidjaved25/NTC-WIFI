@@ -9,6 +9,8 @@ from sqlalchemy import func
 from typing import Optional
 from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from ..database import get_db
 from ..models.portal_design import PortalDesign
@@ -25,6 +27,11 @@ from ..models.omada_config import OmadaConfig
 from ..utils.helpers import send_otp_sms, generate_otp
 
 router = APIRouter(prefix="/public", tags=["Public API"])
+
+# Get rate limiter from app state
+def get_limiter():
+    from ..main import app
+    return app.state.limiter
 
 
 # Schemas
@@ -131,7 +138,8 @@ async def get_portal_design(db: Session = Depends(get_db)):
 # ========== OTP & AUTHENTICATION ==========
 
 @router.post("/send-otp")
-async def send_otp(data: OTPRequest, db: Session = Depends(get_db)):
+@get_limiter().limit("5/minute")  # 5 OTP requests per minute per IP
+async def send_otp(request: Request, data: OTPRequest, db: Session = Depends(get_db)):
     """Send OTP to mobile number"""
     
     try:
@@ -166,7 +174,8 @@ async def send_otp(data: OTPRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/verify-otp")
-async def verify_otp(data: OTPVerify, db: Session = Depends(get_db)):
+@get_limiter().limit("10/minute")  # 10 verification attempts per minute
+async def verify_otp(request: Request, data: OTPVerify, db: Session = Depends(get_db)):
     """Verify OTP code"""
     
     mobile = data.mobile.strip()
@@ -189,7 +198,8 @@ async def verify_otp(data: OTPVerify, db: Session = Depends(get_db)):
 
 
 @router.post("/register")
-async def register_user(data: UserRegister, db: Session = Depends(get_db)):
+@get_limiter().limit("20/hour")  # 20 registrations per hour
+async def register_user(request: Request, data: UserRegister, db: Session = Depends(get_db)):
     """Register user and create RADIUS account"""
     
     mobile = data.mobile.strip()
@@ -274,7 +284,8 @@ async def register_user(data: UserRegister, db: Session = Depends(get_db)):
 
 
 @router.post("/authorize")
-async def authorize_wifi(data: WiFiAuth, db: Session = Depends(get_db)):
+@get_limiter().limit("30/hour")  # 30 authorization attempts per hour
+async def authorize_wifi(request: Request, data: WiFiAuth, db: Session = Depends(get_db)):
     """
     Authorize WiFi via RADIUS authentication
     

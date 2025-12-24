@@ -1,6 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import os
 
 from .config import settings
@@ -25,20 +28,54 @@ app = FastAPI(
     title=settings.APP_NAME,
     description="Admin Portal for NTC WiFi Captive Portal Management",
     version="1.0.0",
-    docs_url="/api/docs" if settings.DEBUG else None,
-    redoc_url="/api/redoc" if settings.DEBUG else None
+    docs_url="/api/docs" if settings.ENABLE_API_DOCS else None,
+    redoc_url="/api/redoc" if settings.ENABLE_API_DOCS else None
 )
 
-# CORS Middleware - Allow all origins in development
+if settings.ENABLE_API_DOCS:
+    print("📚 API Documentation: ENABLED (ensure this is disabled in production!)")
+else:
+    print("📚 API Documentation: DISABLED (production mode)")
+
+# Initialize Rate Limiter with Redis backend
+limiter = Limiter(
+    key_func=get_remote_address,
+    storage_uri=settings.REDIS_URL,
+    default_limits=["1000/hour"]  # Default limit for all routes
+)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+print("⏱️ Rate limiting: Enabled (Redis backend)")
+
+# CORS Middleware - Production Safe Configuration
+# Define allowed origins based on environment
+ALLOWED_ORIGINS = []
+
+if settings.APP_ENV == "development":
+    ALLOWED_ORIGINS = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:5173",
+    ]
+    print("🌐 CORS: Development mode - localhost allowed")
+else:
+    # Production origins - Configure these in .env file
+    ALLOWED_ORIGINS = settings.origins_list
+    print(f"🌐 CORS: Production mode - {len(ALLOWED_ORIGINS)} origins allowed")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Temporary: Allow all origins
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
     allow_headers=["*"],
+    max_age=3600,
 )
 
-print("🌐 CORS: Allowing all origins (development mode)")
+# Security Headers Middleware
+from .middleware.security import SecurityHeadersMiddleware
+app.add_middleware(SecurityHeadersMiddleware)
+print("🔒 Security headers middleware enabled")
 
 # Mount static files directory for media
 MEDIA_BASE = "D:/Codes/NTC/NTC Public Wifi/media"

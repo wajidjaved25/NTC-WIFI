@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 import random
 import requests
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from ..database import get_db
 from ..models.admin import Admin
@@ -15,9 +17,15 @@ from ..utils.helpers import send_otp_sms
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
+# Get rate limiter from app state
+def get_limiter():
+    from ..main import app
+    return app.state.limiter
+
 # Admin Login with Password (for superadmin and admin roles)
 @router.post("/login", response_model=TokenResponse)
-async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+@get_limiter().limit("5/minute")  # 5 login attempts per minute
+async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     # Find admin by username
     admin = db.query(Admin).filter(Admin.username == form_data.username).first()
     
