@@ -29,7 +29,10 @@ class SingleDeviceEnforcer:
     
     def check_and_disconnect_old_session(self, user_id: int, new_mac_address: str) -> Dict:
         """
-        Check if user has active session on different device and disconnect it
+        Check if user has active session on different device
+        
+        POLICY: Block new login if active session exists on different device
+        (Don't attempt to disconnect - let sessions expire naturally)
         
         Args:
             user_id: User ID attempting to login
@@ -38,19 +41,19 @@ class SingleDeviceEnforcer:
         Returns:
             Dict with status information:
             {
+                'allowed': bool,  # True if login allowed, False if blocked
                 'had_active_session': bool,
                 'old_session_id': int or None,
                 'old_mac_address': str or None,
-                'disconnected': bool,
                 'message': str
             }
         """
         
         result = {
+            'allowed': True,
             'had_active_session': False,
             'old_session_id': None,
             'old_mac_address': None,
-            'disconnected': False,
             'message': 'No active session found'
         }
         
@@ -62,56 +65,39 @@ class SingleDeviceEnforcer:
         ).all()
         
         if not active_sessions:
-            logger.info(f"User {user_id}: No active sessions found")
+            logger.info(f"User {user_id}: No active sessions found - login allowed")
             return result
         
         # Check if any active session is on a different device
-        disconnect_attempted = False
-        disconnect_successful = False
-        
         for session in active_sessions:
             # Normalize MAC addresses for comparison
             session_mac = self._normalize_mac(session.mac_address)
             new_mac = self._normalize_mac(new_mac_address)
             
             if session_mac != new_mac:
-                logger.info(f"User {user_id}: Found active session on different device")
+                logger.info(f"User {user_id}: Active session detected on different device")
                 logger.info(f"  Old device: {session_mac}")
                 logger.info(f"  New device: {new_mac}")
+                logger.info(f"  Session started: {session.start_time}")
                 
+                # Calculate session age
+                if session.start_time:
+                    from datetime import timezone
+                    age_seconds = (datetime.now(timezone.utc) - session.start_time).total_seconds()
+                    age_minutes = int(age_seconds / 60)
+                    logger.info(f"  Session age: {age_minutes} minutes")
+                
+                result['allowed'] = False
                 result['had_active_session'] = True
                 result['old_session_id'] = session.id
                 result['old_mac_address'] = session.mac_address
+                result['message'] = f'You have an active session on another device ({session_mac}). Please wait for it to expire or disconnect from that device first.'
                 
-                # Disconnect old session via RADIUS CoA
-                disconnect_success = self._disconnect_session(session)
-                disconnect_attempted = True
-                
-                if disconnect_success:
-                    # Update session status in database
-                    session.session_status = 'terminated'
-                    session.end_time = datetime.now(timezone.utc)
-                    session.termination_cause = 'Single-device policy - New login from different device'
-                    
-                    # Calculate duration
-                    if session.start_time:
-                        duration_seconds = (session.end_time - session.start_time).total_seconds()
-                        session.duration = int(duration_seconds)
-                    
-                    self.db.commit()
-                    
-                    disconnect_successful = True
-                    result['disconnected'] = True
-                    result['message'] = f'Old session on {session_mac} disconnected successfully'
-                    
-                    logger.info(f"✓ Old session {session.id} disconnected and marked as terminated")
-                else:
-                    result['message'] = f'Failed to disconnect old session on {session_mac}'
-                    logger.warning(f"✗ Failed to disconnect session {session.id}")
+                logger.warning(f"✗ Login blocked: User {user_id} already has active session on {session_mac}")
+                break
         
-        # If we attempted disconnects but none succeeded
-        if disconnect_attempted and not disconnect_successful:
-            result['disconnected'] = False
+        if result['allowed']:
+            logger.info(f"✓ Login allowed: User {user_id} has active session on same device or no conflicts")
         
         return result
     

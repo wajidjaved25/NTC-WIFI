@@ -310,7 +310,7 @@ async def authorize_wifi(request: Request, data: WiFiAuth, db: Session = Depends
         raise HTTPException(status_code=500, detail="No Omada configuration")
     
     # ===== SINGLE-DEVICE ENFORCEMENT =====
-    # Check if user has active session on different device and disconnect it
+    # Check if user has active session on different device
     print("[Step 0: Single-Device Policy Check]")
     from ..services.single_device_enforcer import SingleDeviceEnforcer
     
@@ -320,13 +320,21 @@ async def authorize_wifi(request: Request, data: WiFiAuth, db: Session = Depends
         new_mac_address=data.mac_address or "unknown"
     )
     
-    if enforcement_result['had_active_session']:
-        print(f"✓ Single-device policy enforced:")
+    # If login is not allowed (active session on different device), reject the request
+    if not enforcement_result['allowed']:
+        print(f"✗ Login blocked: Active session on another device")
         print(f"  Old device: {enforcement_result['old_mac_address']}")
-        print(f"  Disconnected: {enforcement_result['disconnected']}")
         print(f"  Message: {enforcement_result['message']}")
+        raise HTTPException(
+            status_code=409,  # 409 Conflict
+            detail=enforcement_result['message']
+        )
+    
+    if enforcement_result['had_active_session']:
+        # User has active session but on the SAME device (re-authenticating)
+        print(f"✓ Single-device check: Active session found on same device - allowing re-authentication")
     else:
-        print(f"✓ No existing active sessions found - proceeding with authorization")
+        print(f"✓ Single-device check: No active sessions found - allowing new login")
     
     # Continue with normal authorization process
     user_password = user.cnic if user.id_type == 'cnic' else user.passport
@@ -434,7 +442,7 @@ async def authorize_wifi(request: Request, data: WiFiAuth, db: Session = Depends
         print(f"User: {user.mobile}")
         print(f"MAC: {client_mac}")
         print(f"Duration: {radius_result.get('session_timeout', 3600)}s")
-        print(f"Old session disconnected: {enforcement_result['disconnected']}")
+        print(f"Single-device policy: Enforced")
         print(f"Redirect to: {browserauth_url}")
         print(f"{'='*60}\n")
         
@@ -447,9 +455,7 @@ async def authorize_wifi(request: Request, data: WiFiAuth, db: Session = Depends
             "radius_authenticated": True,
             "browserauth_url": browserauth_url,
             "form_data": auth_form_data,
-            "redirect_url": omada_config.redirect_url or "http://www.google.com",
-            "single_device_enforced": enforcement_result['had_active_session'],
-            "old_session_disconnected": enforcement_result['disconnected']
+            "redirect_url": omada_config.redirect_url or "http://www.google.com"
         }
     
     except HTTPException:
