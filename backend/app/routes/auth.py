@@ -5,8 +5,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 import random
 import requests
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 from ..database import get_db
 from ..models.admin import Admin
@@ -14,17 +12,13 @@ from ..models.otp import OTP
 from ..schemas.auth import TokenResponse, OTPRequest, OTPVerify, AdminCreate
 from ..utils.security import verify_password, get_password_hash, create_access_token, get_current_user
 from ..utils.helpers import send_otp_sms
+from ..limiter import limiter
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-# Get rate limiter from app state
-def get_limiter():
-    from ..main import app
-    return app.state.limiter
-
 # Admin Login with Password (for superadmin and admin roles)
 @router.post("/login", response_model=TokenResponse)
-@get_limiter().limit("5/minute")  # 5 login attempts per minute
+@limiter.limit("5/minute")  # 5 login attempts per minute
 async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     # Find admin by username
     admin = db.query(Admin).filter(Admin.username == form_data.username).first()

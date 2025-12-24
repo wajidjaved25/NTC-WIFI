@@ -1,8 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 import os
 
@@ -38,11 +37,9 @@ else:
     print("📚 API Documentation: DISABLED (production mode)")
 
 # Initialize Rate Limiter with Redis backend
-limiter = Limiter(
-    key_func=get_remote_address,
-    storage_uri=settings.REDIS_URL,
-    default_limits=["1000/hour"]  # Default limit for all routes
-)
+from .limiter import limiter
+
+limiter.storage_uri = settings.REDIS_URL  # Set Redis storage
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 print("⏱️ Rate limiting: Enabled (Redis backend)")
