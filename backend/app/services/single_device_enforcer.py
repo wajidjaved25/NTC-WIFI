@@ -137,22 +137,33 @@ class SingleDeviceEnforcer:
             logger.info(f"  MAC: {session.mac_address}")
             logger.info(f"  Site ID: {getattr(session, 'site_id', None)}")
             
-            # Send CoA disconnect packet using the CoA service
-            # Need to run async function in sync context
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            # Send CoA disconnect in a separate thread to avoid event loop conflicts
+            # This is necessary because we're being called from an async context (FastAPI)
+            # but need to run async code (CoA service)
+            import threading
+            import concurrent.futures
             
-            try:
-                coa_result = loop.run_until_complete(
-                    coa_service.disconnect_user(
-                        username=username,
-                        site_id=getattr(session, 'site_id', None),
-                        session_id=str(session.id),
-                        framed_ip=session.ip_address
+            def run_coa_in_thread():
+                """Run CoA disconnect in a separate thread with its own event loop"""
+                import asyncio
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    return loop.run_until_complete(
+                        coa_service.disconnect_user(
+                            username=username,
+                            site_id=getattr(session, 'site_id', None),
+                            session_id=str(session.id),
+                            framed_ip=session.ip_address
+                        )
                     )
-                )
-            finally:
-                loop.close()
+                finally:
+                    loop.close()
+            
+            # Execute in thread pool with timeout
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(run_coa_in_thread)
+                coa_result = future.result(timeout=30)  # 30 second timeout
             
             if coa_result.get('success'):
                 logger.info(f"✓ RADIUS CoA disconnect successful for session {session.id}")
