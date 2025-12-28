@@ -1,0 +1,24 @@
+[Unit]
+Description=NTC WiFi Backend API
+After=network.target postgresql.service redis-server.service pgbouncer.service
+
+[Service]
+Type=notify
+User=root
+WorkingDirectory=/opt/ntc-wifi/backend
+Environment="PATH=/opt/ntc-wifi/backend/venv/bin"
+
+ExecStart=/opt/ntc-wifi/backend/venv/bin/uvicorn app.main:app \
+    --host 0.0.0.0 \
+    --port 8000 \
+    --workers 8 \
+    --loop uvloop \
+    --log-level info \
+    --access-log
+
+Restart=always
+RestartSec=10
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
