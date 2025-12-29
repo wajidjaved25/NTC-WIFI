@@ -10,6 +10,7 @@ from .database import engine, Base
 from .services.data_limit_enforcer import data_limit_enforcer
 from .services.fortigate_syslog_receiver import syslog_receiver
 from .services.coa_service import coa_service
+from .services.session_cleanup import session_cleanup_service
 
 # Import all models (required for SQLAlchemy to create tables)
 from .models import (
@@ -125,6 +126,11 @@ async def startup_event():
     # Start data limit enforcement
     await data_limit_enforcer.start()
     
+    # Start session cleanup service
+    import asyncio
+    asyncio.create_task(session_cleanup_service.start())
+    print(f"🧹 Session Cleanup Service: Started (runs every 5 minutes)")
+    
     # Start FortiGate syslog receiver
     try:
         syslog_receiver.start()
@@ -139,6 +145,9 @@ async def shutdown_event():
     """Cleanup on shutdown"""
     # Stop data limit enforcer
     await data_limit_enforcer.stop()
+    
+    # Stop session cleanup service
+    await session_cleanup_service.stop()
     
     # Stop syslog receiver
     syslog_receiver.stop()
