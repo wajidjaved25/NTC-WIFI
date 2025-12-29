@@ -431,11 +431,14 @@ async def authorize_wifi(request: Request, data: WiFiAuth, db: Session = Depends
         print(f"Browserauth URL: {browserauth_url}")
         print(f"Form data: {auth_form_data}")
         
-        # Update session status
-        session.session_status = 'pending_browserauth'
+        # Update session status to ACTIVE
+        # The session is now authorized and should be tracked for single-device enforcement
+        session.session_status = 'active'  # ← CRITICAL: Mark as active for single-device check
         user.total_sessions += 1
         user.last_login = datetime.now(timezone.utc)
         db.commit()
+        
+        print(f"✓ Session {session.id} marked as ACTIVE for single-device enforcement")
         
         print(f"\n{'='*60}")
         print(f"✓✓✓ RADIUS AUTHENTICATION READY ✓✓✓")
