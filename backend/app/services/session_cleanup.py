@@ -64,8 +64,7 @@ class SessionCleanupService:
                     s.session_status = 'active'
                     AND s.end_time IS NULL
                     AND r.acctstoptime IS NOT NULL
-                    AND (REPLACE(REPLACE(s.mac_address, ':', ''), '-', '') = REPLACE(REPLACE(REPLACE(r.callingstationid, ':', ''), '-', ''), '.', '')
-                         OR s.ip_address = r.framedipaddress)
+                    AND REPLACE(REPLACE(s.mac_address, ':', ''), '-', '') = REPLACE(REPLACE(REPLACE(r.callingstationid, ':', ''), '-', ''), '.', '')
             """)
             
             result = db.execute(sync_query)
