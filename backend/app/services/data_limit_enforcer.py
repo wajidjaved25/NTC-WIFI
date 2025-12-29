@@ -282,10 +282,11 @@ class DataLimitEnforcer:
     async def _send_radius_coa_disconnect(self, db: Session, username: str, session_id: str, mac_address: str, nas_ip: str) -> bool:
         """
         Send RADIUS CoA Disconnect-Request to immediately disconnect user.
-        Looks up correct CoA port and secret from sites table.
+        Tries all sites with matching NAS IP (since multiple sites may share same controller)
+        and attempts disconnect on each site's CoA port until one succeeds.
         
         Returns:
-            bool: True if disconnect was acknowledged, False otherwise
+            bool: True if disconnect was acknowledged from any site, False otherwise
         """
         try:
             import shutil
@@ -303,61 +304,71 @@ class DataLimitEnforcer:
                 print("⚠️ radclient not found - install with: sudo apt install freeradius-utils")
                 return False
             
-            # Lookup site-specific CoA port and secret from sites table
-            site_info = db.execute(
+            # Get ALL sites with matching NAS IP (multiple sites may share same controller)
+            # We need to try each site's CoA port since we don't know which site the user is on
+            sites = db.execute(
                 text("""
-                    SELECT radius_coa_port, radius_secret 
+                    SELECT site_name, radius_coa_port, radius_secret 
                     FROM sites 
                     WHERE radius_nas_ip = :nas_ip AND is_active = TRUE
-                    LIMIT 1
+                    ORDER BY site_name
                 """),
                 {"nas_ip": nas_ip}
-            ).fetchone()
+            ).fetchall()
             
-            if site_info:
-                coa_port = site_info[0]
-                coa_secret = site_info[1]
-                print(f"📡 Using site-specific CoA port {coa_port} for NAS {nas_ip}")
-            else:
-                # Fallback to default if site not found
-                coa_port = 3799
-                coa_secret = "MySecretRadius2024!"
-                print(f"⚠️ Site not found for NAS {nas_ip}, using default port {coa_port}")
+            if not sites:
+                print(f"⚠️ No active sites found for NAS {nas_ip}, using default port 3799")
+                sites = [("Default", 3799, "MySecretRadius2024!")]
             
-            # Build the disconnect request
-            # Using here-doc style for proper attribute formatting
-            disconnect_cmd = f'''{radclient_path} -x {nas_ip}:{coa_port} disconnect {coa_secret} << EOF
+            print(f"📡 Found {len(sites)} sites for NAS {nas_ip}, will try each CoA port")
+            
+            # Try each site's CoA port until one succeeds
+            for site_name, coa_port, coa_secret in sites:
+                print(f"📡 Trying CoA disconnect: {site_name} ({nas_ip}:{coa_port}) for {username}")
+                
+                # Build the disconnect request
+                disconnect_cmd = f'''{radclient_path} -x {nas_ip}:{coa_port} disconnect {coa_secret} << EOF
 User-Name = "{username}"
 Acct-Session-Id = "{session_id}"
 Calling-Station-Id = "{mac_address}"
 NAS-IP-Address = {nas_ip}
 EOF'''
+                
+                try:
+                    # Execute the command
+                    process = await asyncio.create_subprocess_shell(
+                        disconnect_cmd,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE
+                    )
+                    
+                    stdout, stderr = await asyncio.wait_for(
+                        process.communicate(),
+                        timeout=5.0
+                    )
+                    
+                    output = stdout.decode() + stderr.decode()
+                    
+                    if 'Disconnect-ACK' in output:
+                        print(f"✓ Disconnect-ACK from {site_name} ({nas_ip}:{coa_port}) for {username}")
+                        return True
+                    elif 'Disconnect-NAK' in output:
+                        print(f"⚠️ Disconnect-NAK from {site_name}: {output[:200]}")
+                        # Continue to try next site
+                    else:
+                        print(f"⚠️ Unexpected response from {site_name}: {output[:200]}")
+                        # Continue to try next site
+                        
+                except asyncio.TimeoutError:
+                    print(f"⏱️ Timeout for {site_name} ({nas_ip}:{coa_port})")
+                    # Continue to try next site
+                except Exception as e:
+                    print(f"⚠️ Error with {site_name}: {e}")
+                    # Continue to try next site
             
-            print(f"Sending RADIUS CoA Disconnect to {nas_ip}:{coa_port} for {username}")
-            
-            # Execute the command
-            process = await asyncio.create_subprocess_shell(
-                disconnect_cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(),
-                timeout=10.0
-            )
-            
-            output = stdout.decode() + stderr.decode()
-            
-            if 'Disconnect-ACK' in output:
-                print(f"✓ RADIUS CoA Disconnect-ACK received for {username}")
-                return True
-            elif 'Disconnect-NAK' in output:
-                print(f"⚠️ RADIUS CoA Disconnect-NAK for {username}: {output}")
-                return False
-            else:
-                print(f"⚠️ RADIUS CoA unexpected response for {username}: {output}")
-                return False
+            # All sites failed
+            print(f"❌ CoA disconnect failed for {username} - tried {len(sites)} sites with no success")
+            return False
                 
         except asyncio.TimeoutError:
             print(f"⚠️ RADIUS CoA timed out for {username}")
