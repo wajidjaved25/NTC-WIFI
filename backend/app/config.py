@@ -19,6 +19,17 @@ class Settings(BaseSettings):
     DB_USER: str = "postgres"
     DB_PASSWORD: str
     
+    # Syslog Server Database (for firewall logs)
+    SYSLOG_DB_HOST: str = "localhost"  # Will be syslog server IP in production
+    SYSLOG_DB_PORT: int = 5432
+    SYSLOG_DB_NAME: str = "ntc_wifi_logs"
+    SYSLOG_DB_USER: str = "syslog_user"
+    SYSLOG_DB_PASSWORD: str = "SecureLogPassword123"
+    
+    @property
+    def syslog_database_url(self) -> str:
+        return f"postgresql://{self.SYSLOG_DB_USER}:{self.SYSLOG_DB_PASSWORD}@{self.SYSLOG_DB_HOST}:{self.SYSLOG_DB_PORT}/{self.SYSLOG_DB_NAME}"
+    
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
     REDIS_HOST: str = "localhost"

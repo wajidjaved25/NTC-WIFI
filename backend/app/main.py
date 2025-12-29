@@ -44,11 +44,13 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 print("⏱️ Rate limiting: Enabled (Redis backend)")
 
-# CORS Middleware - Production Safe Configuration
-# Define allowed origins based on environment
+# CORS Middleware - PUBLIC WIFI Configuration
+# For public WiFi, we need to allow ALL origins since clients come from various subnets
+# Admin portal is separate and has authentication, so this is safe
 ALLOWED_ORIGINS = []
 
 if settings.APP_ENV == "development":
+    # Development: Allow localhost for testing
     ALLOWED_ORIGINS = [
         "http://localhost:3000",
         "http://localhost:3001",
@@ -56,9 +58,14 @@ if settings.APP_ENV == "development":
     ]
     print("🌐 CORS: Development mode - localhost allowed")
 else:
-    # Production origins - Configure these in .env file
-    ALLOWED_ORIGINS = settings.origins_list
-    print(f"🌐 CORS: Production mode - {len(ALLOWED_ORIGINS)} origins allowed")
+    # Production: For PUBLIC WiFi portal, allow all origins
+    # This is required because:
+    # 1. Users access from multiple subnets (192.168.0.x, 192.168.4.x, etc.)
+    # 2. Devices may use different DNS/IP configurations
+    # 3. Public endpoints (/api/public/*) have no auth - CNIC/mobile validation prevents abuse
+    # 4. Admin endpoints still require authentication
+    ALLOWED_ORIGINS = ["*"]  # Allow all for public WiFi portal
+    print("🌐 CORS: Production mode - All origins allowed (Public WiFi)")
 
 app.add_middleware(
     CORSMiddleware,
