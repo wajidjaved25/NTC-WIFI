@@ -68,24 +68,42 @@ class SingleDeviceEnforcer:
             logger.info(f"User {user_id}: No active sessions found - login allowed")
             return result
         
-        # Check if any active session is on a different device
+        # Current time for expiry checking
+        now = datetime.now(timezone.utc)
+        
+        # Check if any active session is on a different device AND not expired
         for session in active_sessions:
+            # Check if session has expired based on timeout
+            if session.start_time and session.session_timeout:
+                from datetime import timedelta
+                session_expiry = session.start_time + timedelta(seconds=session.session_timeout)
+                
+                if now >= session_expiry:
+                    # Session has expired - mark it as ended
+                    logger.info(f"Session {session.id} has expired - auto-ending")
+                    session.session_status = 'ended'
+                    session.end_time = now
+                    self.db.commit()
+                    continue  # Skip this expired session
+            
             # Normalize MAC addresses for comparison
             session_mac = self._normalize_mac(session.mac_address)
             new_mac = self._normalize_mac(new_mac_address)
             
             if session_mac != new_mac:
-                logger.info(f"User {user_id}: Active session detected on different device")
+                logger.info(f"User {user_id}: Active (non-expired) session detected on different device")
                 logger.info(f"  Old device: {session_mac}")
                 logger.info(f"  New device: {new_mac}")
                 logger.info(f"  Session started: {session.start_time}")
                 
-                # Calculate session age
-                if session.start_time:
-                    from datetime import timezone
-                    age_seconds = (datetime.now(timezone.utc) - session.start_time).total_seconds()
+                # Calculate session age and remaining time
+                if session.start_time and session.session_timeout:
+                    age_seconds = (now - session.start_time).total_seconds()
                     age_minutes = int(age_seconds / 60)
+                    remaining_seconds = session.session_timeout - age_seconds
+                    remaining_minutes = int(remaining_seconds / 60)
                     logger.info(f"  Session age: {age_minutes} minutes")
+                    logger.info(f"  Time remaining: {remaining_minutes} minutes")
                 
                 result['allowed'] = False
                 result['had_active_session'] = True
@@ -97,7 +115,7 @@ class SingleDeviceEnforcer:
                 break
         
         if result['allowed']:
-            logger.info(f"✓ Login allowed: User {user_id} has active session on same device or no conflicts")
+            logger.info(f"✓ Login allowed: User {user_id} has no active non-expired sessions on different device")
         
         return result
     
