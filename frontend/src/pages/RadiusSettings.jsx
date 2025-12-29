@@ -151,64 +151,129 @@ const RadiusSettings = () => {
                 name="default_session_timeout"
                 label={
                   <span>
-                    Default Session Duration
+                    Default Session Duration (seconds)
                     <Tooltip title="How long a user can stay connected before needing to re-authenticate">
                       <InfoCircleOutlined style={{ marginLeft: '8px', color: '#999' }} />
                     </Tooltip>
                   </span>
                 }
-                rules={[{ required: true, message: 'Please select session duration' }]}
+                rules={[{ required: true, message: 'Please enter session duration' }]}
               >
-                <Select size="large">
-                  {settings?.timeout_options?.map(opt => (
-                    <Option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </Option>
-                  ))}
-                </Select>
+                <InputNumber 
+                  min={60} 
+                  max={86400}
+                  size="large" 
+                  style={{ width: '100%' }}
+                  addonAfter="seconds"
+                  placeholder="Enter custom value or use presets below"
+                />
               </Form.Item>
+              
+              {/* Quick Presets */}
+              <div style={{ marginBottom: '16px' }}>
+                <span style={{ marginRight: '8px', fontSize: '12px', color: '#666' }}>Quick Presets:</span>
+                {[
+                  { label: '30 min', value: 1800 },
+                  { label: '1 hour', value: 3600 },
+                  { label: '2 hours', value: 7200 },
+                  { label: '4 hours', value: 14400 },
+                  { label: '8 hours', value: 28800 },
+                  { label: '24 hours', value: 86400 }
+                ].map(preset => (
+                  <Button
+                    key={preset.value}
+                    size="small"
+                    style={{ marginRight: '4px', marginBottom: '4px' }}
+                    onClick={() => form.setFieldsValue({ default_session_timeout: preset.value })}
+                  >
+                    {preset.label}
+                  </Button>
+                ))}
+              </div>
 
               <Form.Item
                 name="max_session_timeout"
                 label={
                   <span>
-                    Maximum Session Duration
+                    Maximum Session Duration (seconds)
                     <Tooltip title="Maximum allowed session time (for per-user overrides)">
                       <InfoCircleOutlined style={{ marginLeft: '8px', color: '#999' }} />
                     </Tooltip>
                   </span>
                 }
               >
-                <Select size="large">
-                  <Option value={3600}>1 hour</Option>
-                  <Option value={7200}>2 hours</Option>
-                  <Option value={14400}>4 hours</Option>
-                  <Option value={28800}>8 hours</Option>
-                  <Option value={43200}>12 hours</Option>
-                  <Option value={86400}>24 hours</Option>
-                </Select>
+                <InputNumber 
+                  min={3600} 
+                  max={86400}
+                  size="large" 
+                  style={{ width: '100%' }}
+                  addonAfter="seconds"
+                  placeholder="Enter custom value or use presets below"
+                />
               </Form.Item>
+              
+              <div style={{ marginBottom: '16px' }}>
+                <span style={{ marginRight: '8px', fontSize: '12px', color: '#666' }}>Quick Presets:</span>
+                {[
+                  { label: '1 hour', value: 3600 },
+                  { label: '2 hours', value: 7200 },
+                  { label: '4 hours', value: 14400 },
+                  { label: '8 hours', value: 28800 },
+                  { label: '12 hours', value: 43200 },
+                  { label: '24 hours', value: 86400 }
+                ].map(preset => (
+                  <Button
+                    key={preset.value}
+                    size="small"
+                    style={{ marginRight: '4px', marginBottom: '4px' }}
+                    onClick={() => form.setFieldsValue({ max_session_timeout: preset.value })}
+                  >
+                    {preset.label}
+                  </Button>
+                ))}
+              </div>
 
               <Form.Item
                 name="idle_timeout"
                 label={
                   <span>
-                    Idle Timeout
-                    <Tooltip title="Disconnect user after this period of inactivity">
+                    Idle Timeout (seconds)
+                    <Tooltip title="Disconnect user after this period of inactivity (0 = disabled)">
                       <InfoCircleOutlined style={{ marginLeft: '8px', color: '#999' }} />
                     </Tooltip>
                   </span>
                 }
               >
-                <Select size="large">
-                  <Option value={300}>5 minutes</Option>
-                  <Option value={600}>10 minutes</Option>
-                  <Option value={900}>15 minutes</Option>
-                  <Option value={1800}>30 minutes</Option>
-                  <Option value={3600}>1 hour</Option>
-                  <Option value={0}>Disabled</Option>
-                </Select>
+                <InputNumber 
+                  min={0} 
+                  max={3600}
+                  size="large" 
+                  style={{ width: '100%' }}
+                  addonAfter="seconds"
+                  placeholder="0 = Disabled, or use presets below"
+                />
               </Form.Item>
+              
+              <div style={{ marginBottom: '16px' }}>
+                <span style={{ marginRight: '8px', fontSize: '12px', color: '#666' }}>Quick Presets:</span>
+                {[
+                  { label: 'Disabled', value: 0 },
+                  { label: '5 min', value: 300 },
+                  { label: '10 min', value: 600 },
+                  { label: '15 min', value: 900 },
+                  { label: '30 min', value: 1800 },
+                  { label: '1 hour', value: 3600 }
+                ].map(preset => (
+                  <Button
+                    key={preset.value}
+                    size="small"
+                    style={{ marginRight: '4px', marginBottom: '4px' }}
+                    onClick={() => form.setFieldsValue({ idle_timeout: preset.value })}
+                  >
+                    {preset.label}
+                  </Button>
+                ))}
+              </div>
             </Card>
           </Col>
 
@@ -227,41 +292,91 @@ const RadiusSettings = () => {
                 name="default_bandwidth_down"
                 label={
                   <span>
-                    Download Speed Limit
+                    Download Speed Limit (Kbps)
                     <Tooltip title="Maximum download speed for users (0 = unlimited)">
                       <InfoCircleOutlined style={{ marginLeft: '8px', color: '#999' }} />
                     </Tooltip>
                   </span>
                 }
               >
-                <Select size="large">
-                  {settings?.bandwidth_options?.map(opt => (
-                    <Option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </Option>
-                  ))}
-                </Select>
+                <InputNumber 
+                  min={0} 
+                  max={102400}
+                  size="large" 
+                  style={{ width: '100%' }}
+                  addonAfter="Kbps"
+                  placeholder="0 = Unlimited, or use presets below"
+                />
               </Form.Item>
+              
+              <div style={{ marginBottom: '16px' }}>
+                <span style={{ marginRight: '8px', fontSize: '12px', color: '#666' }}>Quick Presets:</span>
+                {[
+                  { label: 'Unlimited', value: 0 },
+                  { label: '512 Kbps', value: 512 },
+                  { label: '1 Mbps', value: 1024 },
+                  { label: '2 Mbps', value: 2048 },
+                  { label: '5 Mbps', value: 5120 },
+                  { label: '10 Mbps', value: 10240 },
+                  { label: '20 Mbps', value: 20480 },
+                  { label: '50 Mbps', value: 51200 },
+                  { label: '100 Mbps', value: 102400 }
+                ].map(preset => (
+                  <Button
+                    key={preset.value}
+                    size="small"
+                    style={{ marginRight: '4px', marginBottom: '4px' }}
+                    onClick={() => form.setFieldsValue({ default_bandwidth_down: preset.value })}
+                  >
+                    {preset.label}
+                  </Button>
+                ))}
+              </div>
 
               <Form.Item
                 name="default_bandwidth_up"
                 label={
                   <span>
-                    Upload Speed Limit
+                    Upload Speed Limit (Kbps)
                     <Tooltip title="Maximum upload speed for users (0 = unlimited)">
                       <InfoCircleOutlined style={{ marginLeft: '8px', color: '#999' }} />
                     </Tooltip>
                   </span>
                 }
               >
-                <Select size="large">
-                  {settings?.bandwidth_options?.map(opt => (
-                    <Option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </Option>
-                  ))}
-                </Select>
+                <InputNumber 
+                  min={0} 
+                  max={102400}
+                  size="large" 
+                  style={{ width: '100%' }}
+                  addonAfter="Kbps"
+                  placeholder="0 = Unlimited, or use presets below"
+                />
               </Form.Item>
+              
+              <div style={{ marginBottom: '16px' }}>
+                <span style={{ marginRight: '8px', fontSize: '12px', color: '#666' }}>Quick Presets:</span>
+                {[
+                  { label: 'Unlimited', value: 0 },
+                  { label: '256 Kbps', value: 256 },
+                  { label: '512 Kbps', value: 512 },
+                  { label: '1 Mbps', value: 1024 },
+                  { label: '2 Mbps', value: 2048 },
+                  { label: '5 Mbps', value: 5120 },
+                  { label: '10 Mbps', value: 10240 },
+                  { label: '20 Mbps', value: 20480 },
+                  { label: '50 Mbps', value: 51200 }
+                ].map(preset => (
+                  <Button
+                    key={preset.value}
+                    size="small"
+                    style={{ marginRight: '4px', marginBottom: '4px' }}
+                    onClick={() => form.setFieldsValue({ default_bandwidth_up: preset.value })}
+                  >
+                    {preset.label}
+                  </Button>
+                ))}
+              </div>
 
               <Alert
                 message="Bandwidth Control"
