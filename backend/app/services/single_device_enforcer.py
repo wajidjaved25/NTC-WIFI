@@ -68,15 +68,23 @@ class SingleDeviceEnforcer:
             logger.info(f"User {user_id}: No active sessions found - login allowed")
             return result
         
+        # Get session timeout from portal settings
+        from ..models.portal_settings import PortalSettings
+        portal_settings = self.db.query(PortalSettings).first()
+        session_timeout_seconds = 1800  # Default: 30 minutes
+        
+        if portal_settings and portal_settings.session_timeout:
+            session_timeout_seconds = portal_settings.session_timeout
+        
         # Current time for expiry checking
         now = datetime.now(timezone.utc)
         
         # Check if any active session is on a different device AND not expired
         for session in active_sessions:
             # Check if session has expired based on timeout
-            if session.start_time and session.session_timeout:
+            if session.start_time:
                 from datetime import timedelta
-                session_expiry = session.start_time + timedelta(seconds=session.session_timeout)
+                session_expiry = session.start_time + timedelta(seconds=session_timeout_seconds)
                 
                 if now >= session_expiry:
                     # Session has expired - mark it as ended
@@ -97,10 +105,10 @@ class SingleDeviceEnforcer:
                 logger.info(f"  Session started: {session.start_time}")
                 
                 # Calculate session age and remaining time
-                if session.start_time and session.session_timeout:
+                if session.start_time:
                     age_seconds = (now - session.start_time).total_seconds()
                     age_minutes = int(age_seconds / 60)
-                    remaining_seconds = session.session_timeout - age_seconds
+                    remaining_seconds = session_timeout_seconds - age_seconds
                     remaining_minutes = int(remaining_seconds / 60)
                     logger.info(f"  Session age: {age_minutes} minutes")
                     logger.info(f"  Time remaining: {remaining_minutes} minutes")
