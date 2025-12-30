@@ -5,6 +5,7 @@ Optimized for 4 cores, 16GB RAM
 Handles 10,000+ logs/second
 """
 
+import os
 import socket
 import re
 import logging
@@ -14,15 +15,27 @@ import time
 from datetime import datetime
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
+from dotenv import load_dotenv
 
-# Configuration
-DATABASE_URL = "postgresql://syslog_user:SecureLogPassword123@localhost:5432/ntc_wifi_logs"
-SYSLOG_HOST = "0.0.0.0"
-SYSLOG_PORT = 514
-QUEUE_SIZE = 20000
-BATCH_SIZE = 2000
-BATCH_TIMEOUT = 0.5
-NUM_WORKERS = 4
+# Load environment variables
+load_dotenv()
+
+# Configuration from .env
+LOGS_DB_HOST = os.getenv('LOGS_DB_HOST', 'localhost')
+LOGS_DB_PORT = os.getenv('LOGS_DB_PORT', '5432')
+LOGS_DB_NAME = os.getenv('LOGS_DB_NAME', 'ntc_wifi_logs')
+LOGS_DB_USER = os.getenv('LOGS_DB_USER', 'syslog_user')
+LOGS_DB_PASSWORD = os.getenv('LOGS_DB_PASSWORD', 'SecureLogPassword123')
+
+SYSLOG_HOST = os.getenv('SYSLOG_HOST', '0.0.0.0')
+SYSLOG_PORT = int(os.getenv('SYSLOG_PORT', '514'))
+QUEUE_SIZE = int(os.getenv('QUEUE_SIZE', '20000'))
+BATCH_SIZE = int(os.getenv('BATCH_SIZE', '2000'))
+BATCH_TIMEOUT = float(os.getenv('BATCH_TIMEOUT', '0.5'))
+NUM_WORKERS = int(os.getenv('NUM_WORKERS', '4'))
+
+# Build database URL
+DATABASE_URL = f"postgresql://{LOGS_DB_USER}:{LOGS_DB_PASSWORD}@{LOGS_DB_HOST}:{LOGS_DB_PORT}/{LOGS_DB_NAME}"
 
 # Logging
 logging.basicConfig(
