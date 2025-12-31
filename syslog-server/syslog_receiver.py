@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
 High-Performance Syslog Receiver for NTC WiFi
-Optimized for 4 cores, 16GB RAM
-Handles 10,000+ logs/second
+Optimized for 12 cores, 24GB RAM
+Handles 25,000+ logs/second
 """
 
 import os
 import socket
 import re
+import json
 import logging
 import threading
 import queue
@@ -190,6 +191,9 @@ class SyslogReceiver:
             
             for log in logs:
                 log.pop('type', None)
+                # Convert raw_log_data dict to JSON string for JSONB column
+                if 'raw_log_data' in log and isinstance(log['raw_log_data'], dict):
+                    log['raw_log_data'] = json.dumps(log['raw_log_data'])
                 session.execute(insert_query, log)
             
             session.commit()
