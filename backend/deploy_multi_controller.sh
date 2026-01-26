@@ -11,6 +11,18 @@ echo ""
 # Navigate to backend directory
 cd /opt/ntc-wifi/backend
 
+# Activate virtual environment if it exists
+if [ -d "venv" ]; then
+    echo "[0/4] Activating virtual environment..."
+    source venv/bin/activate
+    echo "  ✓ Virtual environment activated"
+else
+    echo "⚠ Warning: No virtual environment found at /opt/ntc-wifi/backend/venv"
+    echo "  Attempting to run without venv..."
+fi
+
+echo ""
+
 # Run migration
 echo "[1/4] Running database migration..."
 python3 migrate_multi_controller.py
