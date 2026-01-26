@@ -144,6 +144,7 @@ const OmadaConfigForm = ({ onSave, onTest, initialData, loading }) => {
           enable_mac_filtering: false,
           auth_type: 'external',
           site_id: 'Default',
+          priority: 1,
         }}
       >
         {hasChanges && (
@@ -165,6 +166,27 @@ const OmadaConfigForm = ({ onSave, onTest, initialData, loading }) => {
                 rules={[{ required: true, message: 'Please enter configuration name' }]}
               >
                 <Input placeholder="e.g., Main Office Controller" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={12}>
+              <Form.Item
+                label={
+                  <span>
+                    Priority{' '}
+                    <Tooltip title="Lower numbers have higher priority (1=Primary, 2=Backup 1, etc.)">
+                      <InfoCircleOutlined />
+                    </Tooltip>
+                  </span>
+                }
+                name="priority"
+                rules={[{ required: true, message: 'Please set priority' }]}
+              >
+                <InputNumber
+                  min={1}
+                  max={10}
+                  style={{ width: '100%' }}
+                  placeholder="1"
+                />
               </Form.Item>
             </Col>
             <Col xs={24} md={12}>

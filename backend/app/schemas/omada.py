@@ -86,6 +86,13 @@ class OmadaConfigResponse(BaseModel):
     bandwidth_limit_down: Optional[int]
     enable_rate_limiting: bool
     is_active: bool
+    
+    # Multi-controller support fields
+    priority: int = 1
+    is_healthy: bool = True
+    last_health_check: Optional[datetime] = None
+    failure_count: int = 0
+    
     created_at: datetime
     updated_at: datetime
     

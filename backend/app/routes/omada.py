@@ -10,6 +10,7 @@ from ..schemas.omada import (
     OmadaTestConnection, ClientAuthorization
 )
 from ..services.omada_service import OmadaService
+from ..services.omada_controller_manager import OmadaControllerManager
 from ..utils.security import get_current_user, has_permission
 from ..utils.helpers import encrypt_password, log_system_event
 
@@ -284,59 +285,33 @@ async def test_connection(
     print(f"Test result: {result}\n")
     return result
 
-# Authorize client
+# Authorize client (with automatic failover)
 @router.post("/authorize-client")
 async def authorize_client(
     auth_data: ClientAuthorization,
     db: Session = Depends(get_db)
 ):
-    # Get active config
-    config = db.query(OmadaConfig).filter(OmadaConfig.is_active == True).first()
-    if not config:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No active Omada configuration"
-        )
+    # Use controller manager for automatic failover
+    manager = OmadaControllerManager(db)
     
-    omada = OmadaService(
-        config.controller_url,
-        config.username,
-        config.password_encrypted,
-        config.controller_id,
-        config.site_id
-    )
-    
-    result = omada.authorize_client(
-        auth_data.mac_address,
-        auth_data.duration,
-        auth_data.upload_limit,
-        auth_data.download_limit
+    result = manager.authorize_client(
+        mac_address=auth_data.mac_address,
+        duration=auth_data.duration,
+        upload_limit=auth_data.upload_limit,
+        download_limit=auth_data.download_limit
     )
     
     return result
 
-# Get online clients
+# Get online clients (with automatic failover)
 @router.get("/online-clients")
 async def get_online_clients(
     current_user: Admin = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    config = db.query(OmadaConfig).filter(OmadaConfig.is_active == True).first()
-    if not config:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No active Omada configuration"
-        )
-    
-    omada = OmadaService(
-        config.controller_url,
-        config.username,
-        config.password_encrypted,
-        config.controller_id,
-        config.site_id
-    )
-    
-    result = omada.get_online_clients()
+    # Use controller manager for automatic failover
+    manager = OmadaControllerManager(db)
+    result = manager.get_online_clients()
     return result
 
 # Get available sites
@@ -413,3 +388,106 @@ async def delete_config(
     )
     
     return {"success": True, "message": "Configuration deleted"}
+
+# Get controller health status
+@router.get("/controller-status")
+async def get_controller_status(
+    current_user: Admin = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get health status of all active controllers"""
+    manager = OmadaControllerManager(db)
+    return manager.get_controller_status()
+
+# Update controller priority
+@router.patch("/configs/{config_id}/priority")
+async def update_controller_priority(
+    config_id: int,
+    priority: int,
+    current_user: Admin = Depends(require_omada_permission),
+    db: Session = Depends(get_db)
+):
+    """Update controller priority (1=primary, 2=backup1, etc.)"""
+    if priority < 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Priority must be 1 or greater"
+        )
+    
+    config = db.query(OmadaConfig).filter(OmadaConfig.id == config_id).first()
+    if not config:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Configuration not found"
+        )
+    
+    old_priority = config.priority
+    config.priority = priority
+    config.updated_by = current_user.id
+    db.commit()
+    
+    # Log the action
+    await log_system_event(
+        db, "INFO", "omada", "priority_updated",
+        f"Controller '{config.config_name}' priority changed from {old_priority} to {priority}",
+        {"config_id": config.id, "old_priority": old_priority, "new_priority": priority},
+        current_user.id
+    )
+    
+    return {"success": True, "message": "Priority updated", "priority": priority}
+
+# Force health check
+@router.post("/configs/{config_id}/health-check")
+async def force_health_check(
+    config_id: int,
+    current_user: Admin = Depends(require_omada_permission),
+    db: Session = Depends(get_db)
+):
+    """Force immediate health check on a controller"""
+    config = db.query(OmadaConfig).filter(OmadaConfig.id == config_id).first()
+    if not config:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Configuration not found"
+        )
+    
+    manager = OmadaControllerManager(db)
+    is_healthy = manager._check_controller_health(config)
+    
+    return {
+        "success": True,
+        "controller": config.config_name,
+        "is_healthy": is_healthy,
+        "failure_count": config.failure_count,
+        "last_check": config.last_health_check.isoformat() if config.last_health_check else None
+    }
+
+# Reset controller health
+@router.post("/configs/{config_id}/reset-health")
+async def reset_controller_health(
+    config_id: int,
+    current_user: Admin = Depends(require_omada_permission),
+    db: Session = Depends(get_db)
+):
+    """Reset controller health status and failure count"""
+    config = db.query(OmadaConfig).filter(OmadaConfig.id == config_id).first()
+    if not config:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Configuration not found"
+        )
+    
+    config.is_healthy = True
+    config.failure_count = 0
+    config.last_health_check = None
+    db.commit()
+    
+    # Log the action
+    await log_system_event(
+        db, "INFO", "omada", "health_reset",
+        f"Controller '{config.config_name}' health status reset",
+        {"config_id": config.id},
+        current_user.id
+    )
+    
+    return {"success": True, "message": "Controller health status reset"}

@@ -14,6 +14,12 @@ class OmadaConfig(Base):
     site_id = Column(String(100), default='Default')
     site_name = Column(String(100), nullable=True)
     
+    # Multi-controller support
+    priority = Column(Integer, default=1, nullable=False)  # 1=primary, 2=backup1, 3=backup2, etc.
+    is_healthy = Column(Boolean, default=True)  # Controller health status
+    last_health_check = Column(DateTime(timezone=True), nullable=True)  # Last health check time
+    failure_count = Column(Integer, default=0)  # Consecutive failures
+    
     # Authentication Settings
     auth_type = Column(String(50), default='external')
     redirect_url = Column(String(255), nullable=True)
