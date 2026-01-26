@@ -12,6 +12,9 @@ class OmadaConfigBase(BaseModel):
     site_id: str = "Default"
     site_name: Optional[str] = None
     
+    # Multi-controller support
+    priority: int = 1
+    
     # Authentication Settings
     auth_type: str = "external"
     redirect_url: Optional[str] = None
@@ -51,6 +54,7 @@ class OmadaConfigUpdate(BaseModel):
     password: Optional[str] = None
     site_id: Optional[str] = None
     site_name: Optional[str] = None
+    priority: Optional[int] = None
     auth_type: Optional[str] = None
     redirect_url: Optional[str] = None
     session_timeout: Optional[int] = None

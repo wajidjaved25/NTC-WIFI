@@ -83,6 +83,7 @@ async def create_omada_config(
         password_encrypted=encrypted_password,
         site_id=config_data.site_id,
         site_name=config_data.site_name,
+        priority=config_data.priority,
         auth_type=config_data.auth_type,
         redirect_url=config_data.redirect_url,
         session_timeout=config_data.session_timeout,
