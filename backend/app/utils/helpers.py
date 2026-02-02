@@ -19,17 +19,12 @@ def _get_cipher():
         raise Exception(f"Invalid ENCRYPTION_KEY in .env: {str(e)}. Key must be 44 characters (base64-encoded 32 bytes). Generate with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'")
 
 async def send_otp_sms(mobile: str, otp: str) -> dict:
-    """Send OTP via SMS using connect.smsapp.pk v3 API (Superapp)"""
+    """Send OTP via SMS using primary provider and optionally secondary provider"""
     try:
         from .validators import format_mobile_to_92
         
         # Ensure mobile is in 92XXXXX format
         formatted_mobile = format_mobile_to_92(mobile)
-        
-        # SMS API v3 configuration
-        api_url = "https://connect.smsapp.pk/api/v3/sms/send"
-        api_key = settings.SUPERAPP_API_KEY  # Bearer token
-        sender_id = settings.SUPERAPP_SENDER_ID
         
         # WebOTP-compatible format for auto-fill
         # CRITICAL: @domain and #code MUST be on the same line with space between them
@@ -38,51 +33,130 @@ Valid for 5 minutes. Do not share.
 
 @pmfreewifi.local #{otp}"""
         
-        # v3 API format
-        payload = {
-            "recipient": formatted_mobile,  # 92XXXXX format
-            "sender_id": sender_id,
-            "message": message
+        # Results tracking
+        results = {
+            "primary": None,
+            "secondary": None
         }
         
-        headers = {
-            "Accept": "application/json",
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-        
-        print(f"SMS API URL: {api_url}")
-        print(f"Formatted mobile: {formatted_mobile}")
-        print(f"Sender ID: {sender_id}")
-        
-        # Use asyncio to make non-blocking request
-        loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(
-            None,
-            lambda: requests.post(api_url, json=payload, headers=headers, timeout=10)
-        )
-        
-        print(f"SMS API Response Status: {response.status_code}")
-        print(f"SMS API Response: {response.text}")
-        
-        if response.status_code == 200:
-            result = response.json()
-            if result.get('status') == 'success':
-                return {
-                    "success": True,
-                    "message": "OTP sent successfully",
-                    "mobile": formatted_mobile,
-                    "response": result
-                }
+        # Send via Primary Provider (SuperApp)
+        try:
+            api_url = "https://connect.smsapp.pk/api/v3/sms/send"
+            api_key = settings.SUPERAPP_API_KEY
+            sender_id = settings.SUPERAPP_SENDER_ID
+            
+            payload = {
+                "recipient": formatted_mobile,
+                "sender_id": sender_id,
+                "message": message
+            }
+            
+            headers = {
+                "Accept": "application/json",
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            print(f"[PRIMARY SMS] Sending to: {formatted_mobile}")
+            print(f"[PRIMARY SMS] API URL: {api_url}")
+            
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: requests.post(api_url, json=payload, headers=headers, timeout=10)
+            )
+            
+            print(f"[PRIMARY SMS] Status: {response.status_code}")
+            print(f"[PRIMARY SMS] Response: {response.text}")
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('status') == 'success':
+                    results["primary"] = {"success": True, "provider": "SuperApp"}
+                else:
+                    results["primary"] = {"success": False, "error": result.get('message', 'Unknown error')}
             else:
-                return {
-                    "success": False,
-                    "message": f"SMS API error: {result.get('message', 'Unknown error')}"
+                results["primary"] = {"success": False, "error": f"HTTP {response.status_code}"}
+                
+        except Exception as e:
+            print(f"[PRIMARY SMS] Error: {str(e)}")
+            results["primary"] = {"success": False, "error": str(e)}
+        
+        # Send via Secondary Provider (if enabled)
+        if settings.SMS2_ENABLED and settings.SMS2_API_URL and settings.SMS2_API_KEY:
+            try:
+                api_url_2 = settings.SMS2_API_URL
+                api_key_2 = settings.SMS2_API_KEY
+                sender_id_2 = settings.SMS2_SENDER_ID
+                
+                # Construct payload - assuming similar structure
+                payload_2 = {
+                    "recipient": formatted_mobile,
+                    "sender_id": sender_id_2,
+                    "message": message
                 }
+                
+                headers_2 = {
+                    "Accept": "application/json",
+                    "Authorization": f"Bearer {api_key_2}",
+                    "Content-Type": "application/json"
+                }
+                
+                print(f"[SECONDARY SMS] Sending to: {formatted_mobile}")
+                print(f"[SECONDARY SMS] API URL: {api_url_2}")
+                
+                loop = asyncio.get_event_loop()
+                response_2 = await loop.run_in_executor(
+                    None,
+                    lambda: requests.post(api_url_2, json=payload_2, headers=headers_2, timeout=10)
+                )
+                
+                print(f"[SECONDARY SMS] Status: {response_2.status_code}")
+                print(f"[SECONDARY SMS] Response: {response_2.text}")
+                
+                if response_2.status_code == 200:
+                    result_2 = response_2.json()
+                    if result_2.get('status') == 'success':
+                        results["secondary"] = {"success": True, "provider": "Secondary"}
+                    else:
+                        results["secondary"] = {"success": False, "error": result_2.get('message', 'Unknown error')}
+                else:
+                    results["secondary"] = {"success": False, "error": f"HTTP {response_2.status_code}"}
+                    
+            except Exception as e:
+                print(f"[SECONDARY SMS] Error: {str(e)}")
+                results["secondary"] = {"success": False, "error": str(e)}
+        
+        # Determine overall success
+        primary_success = results["primary"] and results["primary"].get("success", False)
+        secondary_success = results["secondary"] and results["secondary"].get("success", False)
+        
+        if primary_success or secondary_success:
+            # At least one provider succeeded
+            success_providers = []
+            if primary_success:
+                success_providers.append("Primary")
+            if secondary_success:
+                success_providers.append("Secondary")
+                
+            return {
+                "success": True,
+                "message": f"OTP sent successfully via {', '.join(success_providers)}",
+                "mobile": formatted_mobile,
+                "providers": results
+            }
         else:
+            # Both failed
+            error_messages = []
+            if results["primary"]:
+                error_messages.append(f"Primary: {results['primary'].get('error', 'Unknown error')}")
+            if results["secondary"]:
+                error_messages.append(f"Secondary: {results['secondary'].get('error', 'Unknown error')}")
+            
             return {
                 "success": False,
-                "message": f"Failed to send SMS: HTTP {response.status_code}"
+                "message": f"Failed to send SMS: {'; '.join(error_messages)}",
+                "providers": results
             }
     
     except Exception as e:

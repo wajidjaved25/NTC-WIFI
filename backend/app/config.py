@@ -50,11 +50,17 @@ class Settings(BaseSettings):
     def origins_list(self) -> List[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]
     
-    # SMS API (SuperApp)
+    # SMS API (SuperApp - Primary)
     SUPERAPP_API_URL: str = "https://connect.smsapp.pk/api/SendSMS"
     SUPERAPP_API_KEY: str
     SUPERAPP_CLIENT_ID: str
     SUPERAPP_SENDER_ID: str = "NTC WiFi"
+    
+    # SMS API 2 (Secondary Provider)
+    SMS2_API_URL: str = ""
+    SMS2_API_KEY: str = ""
+    SMS2_SENDER_ID: str = "NTC WiFi"
+    SMS2_ENABLED: bool = False  # Set to True to enable second provider
     
     # Omada Controller (Default - can be changed in admin panel)
     OMADA_CONTROLLER_URL: str = "https://10.2.49.26:8043"
