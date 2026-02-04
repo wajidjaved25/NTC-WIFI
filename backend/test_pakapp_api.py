@@ -10,12 +10,23 @@ Usage:
 
 import requests
 import json
+import os
 from datetime import datetime
+from dotenv import load_dotenv
 
+# Load environment variables
+load_dotenv()
 
 # Configuration
 BASE_URL = "http://localhost:8000"  # Change to your server URL
 API_URL = f"{BASE_URL}/api/pakapp"
+API_KEY = os.getenv("PAKAPP_API_KEY", "")  # Load from .env file
+
+if not API_KEY:
+    print("⚠️  WARNING: PAKAPP_API_KEY not found in .env file!")
+    print("   The API requires authentication. Tests will fail without API key.")
+    print("   Please add PAKAPP_API_KEY to your .env file.")
+    exit(1)
 
 
 def print_header(title):
@@ -23,6 +34,14 @@ def print_header(title):
     print("\n" + "=" * 70)
     print(f"  {title}")
     print("=" * 70)
+
+
+def get_headers():
+    """Get request headers with API key"""
+    return {
+        "Content-Type": "application/json",
+        "X-API-Key": API_KEY
+    }
 
 
 def print_result(response, expected_status=None):
@@ -55,7 +74,7 @@ def test_register_user():
     print(f"Sending: {json.dumps(data, indent=2)}")
     
     try:
-        response = requests.post(f"{API_URL}/register", json=data, timeout=10)
+        response = requests.post(f"{API_URL}/register", json=data, headers=get_headers(), timeout=10)
         print_result(response, expected_status=201)
         
         if response.status_code == 201:
@@ -84,7 +103,7 @@ def test_register_duplicate():
     print(f"Sending: {json.dumps(data, indent=2)}")
     
     try:
-        response = requests.post(f"{API_URL}/register", json=data, timeout=10)
+        response = requests.post(f"{API_URL}/register", json=data, headers=get_headers(), timeout=10)
         print_result(response, expected_status=201)
         
         if response.status_code == 201:
@@ -108,7 +127,7 @@ def test_invalid_cnic():
     print(f"Sending: {json.dumps(data, indent=2)}")
     
     try:
-        response = requests.post(f"{API_URL}/register", json=data, timeout=10)
+        response = requests.post(f"{API_URL}/register", json=data, headers=get_headers(), timeout=10)
         print_result(response, expected_status=422)
         
         if response.status_code == 422:
@@ -132,7 +151,7 @@ def test_invalid_phone():
     print(f"Sending: {json.dumps(data, indent=2)}")
     
     try:
-        response = requests.post(f"{API_URL}/register", json=data, timeout=10)
+        response = requests.post(f"{API_URL}/register", json=data, headers=get_headers(), timeout=10)
         print_result(response, expected_status=422)
         
         if response.status_code == 422:
@@ -165,7 +184,7 @@ def test_phone_format_conversion():
         print(f"Input phone: {input_phone}")
         
         try:
-            response = requests.post(f"{API_URL}/register", json=data, timeout=10)
+            response = requests.post(f"{API_URL}/register", json=data, headers=get_headers(), timeout=10)
             
             if response.status_code == 201:
                 user_data = response.json()
@@ -196,7 +215,7 @@ def test_optional_email():
     print(f"Sending: {json.dumps(data, indent=2)}")
     
     try:
-        response = requests.post(f"{API_URL}/register", json=data, timeout=10)
+        response = requests.post(f"{API_URL}/register", json=data, headers=get_headers(), timeout=10)
         print_result(response, expected_status=201)
         
         if response.status_code == 201:
@@ -223,7 +242,7 @@ def test_rate_limiting():
         }
         
         try:
-            response = requests.post(f"{API_URL}/register", json=data, timeout=10)
+            response = requests.post(f"{API_URL}/register", json=data, headers=get_headers(), timeout=10)
             
             if response.status_code == 201:
                 success_count += 1
@@ -295,6 +314,7 @@ def main():
     print("  " + datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     print("=" * 70)
     print(f"  API URL: {API_URL}")
+    print(f"  API Key: {API_KEY[:20]}...{API_KEY[-4:]} (configured)")
     print("=" * 70)
     
     # Check if server is running
