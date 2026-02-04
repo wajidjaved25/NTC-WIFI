@@ -105,6 +105,13 @@ class Settings(BaseSettings):
     PORTAL_URL: str = "http://10.2.49.27:3000"
     ENABLE_IP_MASKING: bool = True
     
+    # PakApp API Security
+    PAKAPP_API_KEY: str = ""  # Set a strong API key for PakApp
+    PAKAPP_ENABLE_API_KEY: bool = True  # Require API key for PakApp endpoints
+    PAKAPP_ALLOWED_IPS: str = ""  # Comma-separated IPs (e.g., "1.2.3.4,5.6.7.8") - empty means all IPs allowed
+    PAKAPP_ENABLE_SIGNATURE: bool = False  # Enable HMAC signature verification
+    PAKAPP_SIGNATURE_SECRET: str = ""  # Shared secret for HMAC signature
+    
     # Backup Settings
     BACKUP_DIR: str = "D:/Backups/NTC_WiFi"
     AUTO_BACKUP_ENABLED: bool = True

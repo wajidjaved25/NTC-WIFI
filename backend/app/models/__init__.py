@@ -16,6 +16,7 @@ from .otp import OTP
 from .radius_settings import RadiusSettings
 from .ipdr import FirewallLog, FirewallImportJob, IPDRSearchHistory
 from .site import Site, NASClient
+from .pakapp_user import PakAppUser
 
 __all__ = [
     "Admin",
@@ -34,5 +35,6 @@ __all__ = [
     "FirewallImportJob",
     "IPDRSearchHistory",
     "Site",
-    "NASClient"
+    "NASClient",
+    "PakAppUser"
 ]
