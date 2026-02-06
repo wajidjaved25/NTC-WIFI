@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../services/api';
 import './PakAppUsers.css';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const PakAppUsers = () => {
   const [users, setUsers] = useState([]);
@@ -24,10 +22,7 @@ const PakAppUsers = () => {
   // Fetch statistics
   const fetchStats = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`${API_URL}/api/pakapp/stats`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await api.get('/pakapp/stats');
       setStats(response.data);
     } catch (err) {
       console.error('Error fetching stats:', err);
@@ -40,7 +35,6 @@ const PakAppUsers = () => {
     setError(null);
     
     try {
-      const token = localStorage.getItem('token');
       const params = {
         page,
         per_page: perPage,
@@ -49,10 +43,7 @@ const PakAppUsers = () => {
       if (search) params.search = search;
       if (filterActive !== 'all') params.is_active = filterActive === 'active';
       
-      const response = await axios.get(`${API_URL}/api/pakapp/users`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params
-      });
+      const response = await api.get('/pakapp/users', { params });
       
       setUsers(response.data.users);
       setTotal(response.data.total);
@@ -67,11 +58,9 @@ const PakAppUsers = () => {
   // Toggle user active status
   const toggleUserStatus = async (userId, currentStatus) => {
     try {
-      const token = localStorage.getItem('token');
-      await axios.patch(
-        `${API_URL}/api/pakapp/users/${userId}`,
-        { is_active: !currentStatus },
-        { headers: { Authorization: `Bearer ${token}` } }
+      await api.patch(
+        `/pakapp/users/${userId}`,
+        { is_active: !currentStatus }
       );
       
       // Refresh users list
