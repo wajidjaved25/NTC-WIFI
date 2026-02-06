@@ -11,6 +11,7 @@ import {
   WifiOutlined,
   DatabaseOutlined,
   EnvironmentOutlined,
+  MobileOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useLocation } from 'react-router-dom'
 import './MainLayout.css'
@@ -100,6 +101,15 @@ function MainLayout({ children, user, onLogout }) {
       })
     }
 
+    // PakApp Users - superadmin & admin only
+    if (['superadmin', 'admin'].includes(user.role)) {
+      items.push({
+        key: '/pakapp-users',
+        icon: <MobileOutlined />,
+        label: 'PakApp Users',
+      })
+    }
+
     // User Management - superadmin & admin only
     if (['superadmin', 'admin'].includes(user.role)) {
       items.push({
@@ -154,6 +164,7 @@ function MainLayout({ children, user, onLogout }) {
               {location.pathname === '/radius-sessions' && 'Active RADIUS Sessions'}
               {location.pathname === '/radius-settings' && 'RADIUS Server Settings'}
               {location.pathname === '/ipdr-reports' && 'IPDR Reports'}
+              {location.pathname === '/pakapp-users' && 'PakApp User Registrations'}
               {location.pathname === '/user-management' && 'WiFi User Management'}
               {location.pathname === '/admin-management' && 'Admin Management'}
               {location.pathname === '/sites' && 'Site Management'}

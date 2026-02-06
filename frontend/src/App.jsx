@@ -14,6 +14,7 @@ import RadiusSessions from './pages/RadiusSessions'
 import RadiusSettings from './pages/RadiusSettings'
 import IPDRReports from './pages/IPDRReports'
 import SiteManagement from './pages/SiteManagement'
+import PakAppUsers from './pages/PakAppUsers'
 import { authAPI } from './services/api'
 import './App.css'
 
@@ -227,6 +228,19 @@ function App() {
           user && ['superadmin', 'admin'].includes(user.role) ? (
             <MainLayout user={user} onLogout={handleLogout}>
               <SiteManagement />
+            </MainLayout>
+          ) : (
+            <Navigate to="/dashboard" />
+          )
+        } 
+      />
+
+      <Route 
+        path="/pakapp-users" 
+        element={
+          user && ['superadmin', 'admin'].includes(user.role) ? (
+            <MainLayout user={user} onLogout={handleLogout}>
+              <PakAppUsers />
             </MainLayout>
           ) : (
             <Navigate to="/dashboard" />
