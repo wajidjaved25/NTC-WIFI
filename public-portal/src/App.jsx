@@ -171,7 +171,7 @@ function App() {
               style={{ display: 'inline-block', lineHeight: 0 }}
             >
               <img 
-                src="/dsit-logo.png" 
+                src="dsit-logo.png" 
                 alt="DSIT - Digital Solutions & Innovation" 
                 style={{ height: '24px', width: 'auto', verticalAlign: 'middle' }}
                 onError={(e) => { 
