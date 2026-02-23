@@ -171,7 +171,7 @@ function App() {
               style={{ display: 'inline-block', lineHeight: 0 }}
             >
               <img 
-                src="/SuperApp-white-logo.png" 
+                src="/DSIT LOGO.png" 
                 alt="SuperApp - The Digital Powerhouse" 
                 style={{ height: '24px', width: 'auto', verticalAlign: 'middle' }}
                 onError={(e) => { e.target.style.display = 'none'; }}
