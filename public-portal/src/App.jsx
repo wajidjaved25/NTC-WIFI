@@ -174,7 +174,10 @@ function App() {
                 src="/dsit-logo.png" 
                 alt="DSIT - Digital Solutions & Innovation" 
                 style={{ height: '24px', width: 'auto', verticalAlign: 'middle' }}
-                onError={(e) => { e.target.style.display = 'none'; }}
+                onError={(e) => { 
+                  console.error('Logo failed to load:', e.target.src);
+                  e.target.style.display = 'none'; 
+                }}
               />
             </a>
           </div>

@@ -300,6 +300,11 @@ function LoginForm({ portalDesign, onSuccess }) {
             src={portalDesign.logo_path}
             alt="Logo"
             className="portal-logo"
+            onError={(e) => {
+              console.error('Portal logo failed to load:', e.target.src);
+              console.log('Database logo_path:', portalDesign.logo_path);
+              e.target.style.display = 'none';
+            }}
           />
         )}
         <h1 className="portal-title" style={{ color: portalDesign?.primary_color }}>
