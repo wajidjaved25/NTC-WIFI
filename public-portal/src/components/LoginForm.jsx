@@ -305,9 +305,12 @@ function LoginForm({ portalDesign, onSuccess }) {
         <h1 className="portal-title" style={{ color: portalDesign?.primary_color }}>
           {portalDesign?.welcome_title || 'Welcome to Free WiFi'}
         </h1>
-        <p className="portal-subtitle">
-          {portalDesign?.welcome_text || 'Connect in seconds'}
-        </p>
+        <div 
+          className="portal-subtitle"
+          dangerouslySetInnerHTML={{ 
+            __html: portalDesign?.welcome_text || 'Connect in seconds' 
+          }}
+        />
       </div>
 
       {/* Progress Indicator */}
