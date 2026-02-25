@@ -55,9 +55,7 @@ const SMSSettings = () => {
     }
 
     try {
-      const response = await api.post('/sms-settings/preview', template, {
-        headers: { 'Content-Type': 'text/plain' }
-      });
+      const response = await api.post('/sms-settings/preview', { template });
       setPreview(response.data);
       setShowPreview(true);
     } catch (error) {

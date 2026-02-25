@@ -14,6 +14,12 @@ from app.schemas.sms_settings import (
     SMSSettingsUpdate,
     SMSPreview
 )
+from pydantic import BaseModel
+
+
+class PreviewRequest(BaseModel):
+    """Request schema for template preview"""
+    template: str
 from app.utils.security import get_current_user
 
 
@@ -103,7 +109,7 @@ async def update_sms_settings(
 
 @router.post("/preview", response_model=SMSPreview)
 async def preview_sms_template(
-    template: str,
+    request: PreviewRequest,
     db: Session = Depends(get_db),
     current_user: Admin = Depends(get_current_user)
 ):
@@ -122,7 +128,7 @@ async def preview_sms_template(
     settings = get_or_create_sms_settings(db)
     
     preview = SMSPreview.from_template(
-        template=template,
+        template=request.template,
         otp="123456",  # Example OTP
         portal_url="pmfreewifi.lan",
         validity=settings.otp_validity_minutes,
