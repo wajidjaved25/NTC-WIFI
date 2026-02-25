@@ -17,6 +17,7 @@ from .radius_settings import RadiusSettings
 from .ipdr import FirewallLog, FirewallImportJob, IPDRSearchHistory
 from .site import Site, NASClient
 from .pakapp_user import PakAppUser
+from .sms_settings import SMSSettings
 
 __all__ = [
     "Admin",
@@ -36,5 +37,6 @@ __all__ = [
     "IPDRSearchHistory",
     "Site",
     "NASClient",
-    "PakAppUser"
+    "PakAppUser",
+    "SMSSettings"
 ]

@@ -12,6 +12,7 @@ import {
   DatabaseOutlined,
   EnvironmentOutlined,
   MobileOutlined,
+  MessageOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useLocation } from 'react-router-dom'
 import './MainLayout.css'
@@ -110,6 +111,15 @@ function MainLayout({ children, user, onLogout }) {
       })
     }
 
+    // SMS Settings - superadmin only
+    if (user.role === 'superadmin') {
+      items.push({
+        key: '/sms-settings',
+        icon: <MessageOutlined />,
+        label: 'SMS Settings',
+      })
+    }
+
     // User Management - superadmin & admin only
     if (['superadmin', 'admin'].includes(user.role)) {
       items.push({
@@ -165,6 +175,7 @@ function MainLayout({ children, user, onLogout }) {
               {location.pathname === '/radius-settings' && 'RADIUS Server Settings'}
               {location.pathname === '/ipdr-reports' && 'IPDR Reports'}
               {location.pathname === '/pakapp-users' && 'PakApp User Registrations'}
+              {location.pathname === '/sms-settings' && 'SMS Settings'}
               {location.pathname === '/user-management' && 'WiFi User Management'}
               {location.pathname === '/admin-management' && 'Admin Management'}
               {location.pathname === '/sites' && 'Site Management'}

@@ -17,11 +17,11 @@ from .models import (
     Admin, User, PortalDesign, PortalSettings,
     Advertisement, AdAnalytics, Session, OmadaConfig,
     DailyUsage, SystemLog, OTP, FirewallLog, FirewallImportJob, IPDRSearchHistory,
-    Site, NASClient, PakAppUser
+    Site, NASClient, PakAppUser, SMSSettings
 )
 
 # Import routes
-from .routes import auth, omada, records, ads, portal, dashboard, public, radius_admin, ipdr, user_management, admin_management, site_management, pakapp
+from .routes import auth, omada, records, ads, portal, dashboard, public, radius_admin, ipdr, user_management, admin_management, site_management, pakapp, sms_settings
 
 # Create FastAPI app
 app = FastAPI(
@@ -103,6 +103,7 @@ app.include_router(user_management.router, prefix="/api")  # WiFi user managemen
 app.include_router(admin_management.router, prefix="/api")  # Admin user management
 app.include_router(site_management.router, prefix="/api")  # Site management
 app.include_router(pakapp.router, prefix="/api")  # PakApp user management
+app.include_router(sms_settings.router, prefix="/api")  # SMS Settings (Superadmin only)
 
 @app.on_event("startup")
 async def startup_event():

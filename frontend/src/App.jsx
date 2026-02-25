@@ -15,6 +15,7 @@ import RadiusSettings from './pages/RadiusSettings'
 import IPDRReports from './pages/IPDRReports'
 import SiteManagement from './pages/SiteManagement'
 import PakAppUsers from './pages/PakAppUsers'
+import SMSSettings from './pages/SMSSettings'
 import { authAPI } from './services/api'
 import './App.css'
 
@@ -241,6 +242,19 @@ function App() {
           user && ['superadmin', 'admin'].includes(user.role) ? (
             <MainLayout user={user} onLogout={handleLogout}>
               <PakAppUsers />
+            </MainLayout>
+          ) : (
+            <Navigate to="/dashboard" />
+          )
+        } 
+      />
+
+      <Route 
+        path="/sms-settings" 
+        element={
+          user && user.role === 'superadmin' ? (
+            <MainLayout user={user} onLogout={handleLogout}>
+              <SMSSettings />
             </MainLayout>
           ) : (
             <Navigate to="/dashboard" />
