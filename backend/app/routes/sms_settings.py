@@ -8,12 +8,13 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.sms_settings import SMSSettings
+from app.models.admin import Admin
 from app.schemas.sms_settings import (
     SMSSettingsResponse,
     SMSSettingsUpdate,
     SMSPreview
 )
-from app.routes.admin_management import get_current_superadmin
+from app.utils.security import get_current_user
 
 
 router = APIRouter(prefix="/sms-settings", tags=["SMS Settings"])
@@ -42,13 +43,20 @@ def get_or_create_sms_settings(db: Session) -> SMSSettings:
 @router.get("/", response_model=SMSSettingsResponse)
 async def get_sms_settings(
     db: Session = Depends(get_db),
-    current_admin: dict = Depends(get_current_superadmin)
+    current_user: Admin = Depends(get_current_user)
 ):
     """
     Get current SMS settings
     
     **Requires:** Superadmin role
     """
+    # Check if user is superadmin
+    if current_user.role != "superadmin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only superadmin can access SMS settings"
+        )
+    
     settings = get_or_create_sms_settings(db)
     return settings
 
@@ -57,7 +65,7 @@ async def get_sms_settings(
 async def update_sms_settings(
     updates: SMSSettingsUpdate,
     db: Session = Depends(get_db),
-    current_admin: dict = Depends(get_current_superadmin)
+    current_user: Admin = Depends(get_current_user)
 ):
     """
     Update SMS settings
@@ -70,6 +78,13 @@ async def update_sms_settings(
     - {portal_url}: Portal URL/domain
     - {sender}: Sender ID
     """
+    # Check if user is superadmin
+    if current_user.role != "superadmin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only superadmin can update SMS settings"
+        )
+    
     settings = get_or_create_sms_settings(db)
     
     # Update fields
@@ -78,7 +93,7 @@ async def update_sms_settings(
         setattr(settings, field, value)
     
     # Track who made the update
-    settings.updated_by = current_admin.get('username', 'unknown')
+    settings.updated_by = current_user.username
     
     db.commit()
     db.refresh(settings)
@@ -90,13 +105,20 @@ async def update_sms_settings(
 async def preview_sms_template(
     template: str,
     db: Session = Depends(get_db),
-    current_admin: dict = Depends(get_current_superadmin)
+    current_user: Admin = Depends(get_current_user)
 ):
     """
     Preview how SMS will look with current settings
     
     **Requires:** Superadmin role
     """
+    # Check if user is superadmin
+    if current_user.role != "superadmin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only superadmin can preview SMS templates"
+        )
+    
     settings = get_or_create_sms_settings(db)
     
     preview = SMSPreview.from_template(
@@ -113,13 +135,20 @@ async def preview_sms_template(
 @router.post("/reset", response_model=SMSSettingsResponse)
 async def reset_to_default(
     db: Session = Depends(get_db),
-    current_admin: dict = Depends(get_current_superadmin)
+    current_user: Admin = Depends(get_current_user)
 ):
     """
     Reset SMS settings to default values
     
     **Requires:** Superadmin role
     """
+    # Check if user is superadmin
+    if current_user.role != "superadmin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only superadmin can reset SMS settings"
+        )
+    
     settings = get_or_create_sms_settings(db)
     
     # Reset to defaults
@@ -131,7 +160,7 @@ async def reset_to_default(
     settings.max_otp_per_number_per_day = 10
     settings.enable_primary_sms = True
     settings.enable_secondary_sms = True
-    settings.updated_by = current_admin.get('username', 'unknown')
+    settings.updated_by = current_user.username
     
     db.commit()
     db.refresh(settings)
