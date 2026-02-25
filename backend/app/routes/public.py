@@ -155,7 +155,7 @@ async def send_otp(request: Request, data: OTPRequest, db: Session = Depends(get
         db.commit()
         
         try:
-            await send_otp_sms(mobile, otp_code)
+            await send_otp_sms(mobile, otp_code, db)
         except Exception as e:
             print(f"SMS failed: {e}")
         

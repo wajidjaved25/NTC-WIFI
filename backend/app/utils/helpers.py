@@ -18,7 +18,7 @@ def _get_cipher():
     except Exception as e:
         raise Exception(f"Invalid ENCRYPTION_KEY in .env: {str(e)}. Key must be 44 characters (base64-encoded 32 bytes). Generate with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'")
 
-async def send_otp_sms(mobile: str, otp: str) -> dict:
+async def send_otp_sms(mobile: str, otp: str, db=None) -> dict:
     """Send OTP via SMS using primary provider and optionally secondary provider"""
     try:
         from .validators import format_mobile_to_92
@@ -26,12 +26,25 @@ async def send_otp_sms(mobile: str, otp: str) -> dict:
         # Ensure mobile is in 92XXXXX format
         formatted_mobile = format_mobile_to_92(mobile)
         
-        # WebOTP-compatible format for auto-fill
-        # CRITICAL: @domain and #code MUST be on the same line with space between them
+        # Get message template from database settings
         message = f"""Your NTC WiFi OTP: {otp}
 Valid for 5 minutes. Do not share.
 
-@pmfreewifi.local #{otp}"""
+@pmfreewifi.local #{otp}"""  # Default fallback
+        
+        if db:
+            try:
+                from ..models.sms_settings import SMSSettings
+                sms_settings = db.query(SMSSettings).first()
+                if sms_settings:
+                    # Use template from database
+                    message = sms_settings.format_otp_message(
+                        otp=otp,
+                        portal_url="pmfreewifi.lan"
+                    )
+            except Exception as e:
+                print(f"[SMS Settings] Failed to load from database, using default: {e}")
+                # Use default message above
         
         # Results tracking
         results = {
