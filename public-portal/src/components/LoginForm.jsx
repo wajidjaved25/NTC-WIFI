@@ -563,7 +563,7 @@ function LoginForm({ portalDesign, onSuccess }) {
               color: '#0369a1',
               lineHeight: '1.5'
             }}>
-              <strong>💡 Quick Tip:</strong> Copy OTP from Superapp, it will auto-fill here!
+              <strong>💡 Quick Tip:</strong> Copy OTP from AFAQ, it will auto-fill here!
               <br/>
               <small style={{ fontSize: '12px', opacity: 0.8 }}>Or paste/type manually</small>
             </div>
