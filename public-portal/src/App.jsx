@@ -172,7 +172,7 @@ function App() {
             >
               <img 
                 src="dsit-logo.png" 
-                alt="DSIT - Digital Solutions & Innovation" 
+                alt="DSIT - Digital Smart & Intelligent Technoligies" 
                 style={{ height: '24px', width: 'auto', verticalAlign: 'middle' }}
                 onError={(e) => { 
                   console.error('Logo failed to load:', e.target.src);

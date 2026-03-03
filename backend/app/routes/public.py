@@ -241,13 +241,13 @@ async def register_user(request: Request, data: UserRegister, db: Session = Depe
         
         if radius_settings:
             session_timeout = radius_settings.default_session_timeout
-            if radius_settings.default_bandwidth_down > 0:
+            if radius_settings.default_bandwidth_down is not None and radius_settings.default_bandwidth_down > 0:
                 bandwidth_down = radius_settings.default_bandwidth_down * 1000  # Convert kbps to bps
-            if radius_settings.default_bandwidth_up > 0:
+            if radius_settings.default_bandwidth_up is not None and radius_settings.default_bandwidth_up > 0:
                 bandwidth_up = radius_settings.default_bandwidth_up * 1000  # Convert kbps to bps
-            if radius_settings.daily_data_limit > 0:
+            if radius_settings.daily_data_limit is not None and radius_settings.daily_data_limit > 0:
                 daily_data_limit = radius_settings.daily_data_limit * 1048576  # Convert MB to bytes
-            if radius_settings.monthly_data_limit > 0:
+            if radius_settings.monthly_data_limit is not None and radius_settings.monthly_data_limit > 0:
                 monthly_data_limit = radius_settings.monthly_data_limit * 1048576  # Convert MB to bytes
         
         radius_created = radius_service.create_radius_user(
