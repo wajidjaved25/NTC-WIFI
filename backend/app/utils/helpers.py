@@ -30,7 +30,7 @@ async def send_otp_sms(mobile: str, otp: str, db=None) -> dict:
         message = f"""Your NTC WiFi OTP: {otp}
 Valid for 5 minutes. Do not share.
 
-@pmfreewifi.local #{otp}"""  # Default fallback
+@192.168.3.252 #{otp}"""  # Default fallback
         
         if db:
             try:
@@ -40,7 +40,7 @@ Valid for 5 minutes. Do not share.
                     # Use template from database
                     message = sms_settings.format_otp_message(
                         otp=otp,
-                        portal_url="pmfreewifi.lan"
+                        portal_url="192.168.3.252"
                     )
             except Exception as e:
                 print(f"[SMS Settings] Failed to load from database, using default: {e}")

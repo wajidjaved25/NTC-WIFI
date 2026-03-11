@@ -130,7 +130,7 @@ async def preview_sms_template(
     preview = SMSPreview.from_template(
         template=request.template,
         otp="123456",  # Example OTP
-        portal_url="pmfreewifi.lan",
+        portal_url="192.168.3.252",
         validity=settings.otp_validity_minutes,
         sender=settings.sender_id
     )

@@ -88,7 +88,7 @@ class SMSPreview(BaseModel):
     estimated_cost: str
     
     @classmethod
-    def from_template(cls, template: str, otp: str = "123456", portal_url: str = "pmfreewifi.lan", validity: int = 5, sender: str = "NTC"):
+    def from_template(cls, template: str, otp: str = "123456", portal_url: str = "192.168.3.252", validity: int = 5, sender: str = "NTC"):
         """Create preview from template"""
         formatted = template.format(
             otp=otp,

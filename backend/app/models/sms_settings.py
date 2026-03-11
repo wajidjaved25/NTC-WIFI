@@ -41,7 +41,7 @@ class SMSSettings(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     updated_by = Column(String(100), nullable=True)  # Admin username who made the change
     
-    def format_otp_message(self, otp: str, portal_url: str = "pmfreewifi.lan") -> str:
+    def format_otp_message(self, otp: str, portal_url: str = "192.168.3.252") -> str:
         """
         Format OTP message using template
         
