@@ -95,7 +95,7 @@ Valid for 5 minutes. Do not share.
             print(f"[PRIMARY SMS] Error: {str(e)}")
             results["primary"] = {"success": False, "error": str(e)}
         
-        # Send via Secondary Provider (if enabled)
+        # Send via Secondary Provider (AFAQ) - if enabled
         if settings.SMS2_ENABLED and settings.SMS2_API_URL and settings.SMS2_API_KEY:
             try:
                 api_url_2 = settings.SMS2_API_URL
@@ -115,8 +115,18 @@ Valid for 5 minutes. Do not share.
                     "Content-Type": "application/json"
                 }
                 
-                print(f"[SECONDARY SMS] Sending to: {formatted_mobile}")
-                print(f"[SECONDARY SMS] API URL: {api_url_2}")
+                print("="*80)
+                print("[SECONDARY SMS - AFAQ] DETAILED REQUEST LOG")
+                print("="*80)
+                print(f"Target Number: {formatted_mobile}")
+                print(f"API URL: {api_url_2}")
+                print(f"Sender ID: {sender_id_2}")
+                print(f"API Key (first 20 chars): {api_key_2[:20]}...")
+                print(f"Full Payload: {json.dumps(payload_2, indent=2)}")
+                print(f"Full Headers: {json.dumps(headers_2, indent=2)}")
+                print(f"Message Length: {len(message)} characters")
+                print(f"Message Preview: {message[:100]}...")
+                print("="*80)
                 
                 loop = asyncio.get_event_loop()
                 response_2 = await loop.run_in_executor(
@@ -124,20 +134,45 @@ Valid for 5 minutes. Do not share.
                     lambda: requests.post(api_url_2, json=payload_2, headers=headers_2, timeout=10)
                 )
                 
-                print(f"[SECONDARY SMS] Status: {response_2.status_code}")
-                print(f"[SECONDARY SMS] Response: {response_2.text}")
+                print("="*80)
+                print("[SECONDARY SMS - AFAQ] DETAILED RESPONSE LOG")
+                print("="*80)
+                print(f"HTTP Status Code: {response_2.status_code}")
+                print(f"Response Headers: {dict(response_2.headers)}")
+                print(f"Response Body: {response_2.text}")
+                
+                # Try to parse JSON response
+                try:
+                    response_json = response_2.json()
+                    print(f"Parsed JSON: {json.dumps(response_json, indent=2)}")
+                except:
+                    print("Response is not valid JSON")
+                    
+                print("="*80)
                 
                 if response_2.status_code == 200:
                     result_2 = response_2.json()
                     if result_2.get('status') == 'success':
-                        results["secondary"] = {"success": True, "provider": "Secondary"}
+                        print("[SECONDARY SMS - AFAQ] ✅ SUCCESS")
+                        results["secondary"] = {"success": True, "provider": "AFAQ"}
                     else:
-                        results["secondary"] = {"success": False, "error": result_2.get('message', 'Unknown error')}
+                        # Log error but don't fail if primary succeeded
+                        error_msg = result_2.get('message', 'Unknown error')
+                        print(f"[SECONDARY SMS - AFAQ] ❌ API Error: {error_msg}")
+                        print(f"[SECONDARY SMS - AFAQ] Full error response: {json.dumps(result_2, indent=2)}")
+                        results["secondary"] = {"success": False, "error": error_msg}
                 else:
+                    print(f"[SECONDARY SMS - AFAQ] ❌ HTTP Error: {response_2.status_code}")
                     results["secondary"] = {"success": False, "error": f"HTTP {response_2.status_code}"}
                     
             except Exception as e:
-                print(f"[SECONDARY SMS] Error: {str(e)}")
+                print("="*80)
+                print(f"[SECONDARY SMS - AFAQ] ❌ EXCEPTION")
+                print(f"Exception Type: {type(e).__name__}")
+                print(f"Exception Message: {str(e)}")
+                import traceback
+                print(f"Full Traceback:\n{traceback.format_exc()}")
+                print("="*80)
                 results["secondary"] = {"success": False, "error": str(e)}
         
         # Determine overall success
